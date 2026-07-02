@@ -1,50 +1,52 @@
-// Explore-mode input (Tech §7): WASD move/strafe, Pointer-Lock mouse yaw with
-// Q/E fallback turning, E to interact. Exposes a small polled state object plus
-// a consumable mouse-yaw accumulator; movement integration lives in main.js so
-// collision stays in world.js.
+// Input (Tech §7). Explore: WASD move/strafe, Pointer-Lock mouse-yaw with
+// Q/arrow turn fallback, E to interact. Menus/modals: mouse clicks (translated
+// into 320×200 buffer space) and number hotkeys. main.js owns integration.
 
-const KEY_MAP = {
+const HELD = {
   KeyW: 'forward', ArrowUp: 'forward',
   KeyS: 'back', ArrowDown: 'back',
   KeyA: 'strafeL', KeyD: 'strafeR',
-  KeyQ: 'turnL', ArrowLeft: 'turnL',
-  KeyE_turn: 'turnR', ArrowRight: 'turnR',
+  KeyQ: 'turnL', ArrowLeft: 'turnL', ArrowRight: 'turnR',
 };
 
 /**
- * Wire input listeners to the canvas and return the polled input state.
  * @param {HTMLCanvasElement} canvas
+ * @returns {Object} polled input state + edge-trigger consumers
  */
 export function createInput(canvas) {
   const state = {
     forward: false, back: false, strafeL: false, strafeR: false,
-    turnL: false, turnR: false, interact: false,
-    yaw: 0,        // accumulated mouse dx since last consume()
-    locked: false,
+    turnL: false, turnR: false,
+    yaw: 0, locked: false,
+    wantPointerLock: false,       // main sets true only in EXPLORE
+    viewport: { scale: 1, offX: 0, offY: 0 },
+    _interact: false,             // edge: consumed by takeInteract()
+    _clicks: [],                  // buffer-space {x,y}
+    _keys: [],                    // buffer of pressed key codes for menus
     consumeYaw() { const y = this.yaw; this.yaw = 0; return y; },
-  };
-
-  const setKey = (code, down) => {
-    // E is interact when pointer-locked, but doubles as turn-right fallback.
-    if (code === 'KeyE') { state.interact = down; state.turnR = down; return; }
-    const action = KEY_MAP[code];
-    if (action) state[action] = down;
+    takeInteract() { const v = this._interact; this._interact = false; return v; },
+    takeClick() { return this._clicks.shift() || null; },
+    takeKey() { return this._keys.shift() || null; },
+    clearBuffered() { this._clicks.length = 0; this._keys.length = 0; this._interact = false; },
   };
 
   window.addEventListener('keydown', (e) => {
-    if (KEY_MAP[e.code] || e.code === 'KeyE') { setKey(e.code, true); e.preventDefault(); }
+    if (e.repeat) return;
+    if (HELD[e.code]) { state[HELD[e.code]] = true; e.preventDefault(); return; }
+    if (e.code === 'KeyE' || e.code === 'Enter' || e.code === 'Space') { state._interact = true; state._keys.push(e.code); e.preventDefault(); return; }
+    if (e.code === 'Escape') { state._keys.push('Escape'); return; }
+    if (/^Digit[1-9]$/.test(e.code)) { state._keys.push(e.code); e.preventDefault(); return; }
+    if (e.code === 'Tab') { state._keys.push('Tab'); e.preventDefault(); }
   });
-  window.addEventListener('keyup', (e) => {
-    if (KEY_MAP[e.code] || e.code === 'KeyE') { setKey(e.code, false); e.preventDefault(); }
-  });
+  window.addEventListener('keyup', (e) => { if (HELD[e.code]) { state[HELD[e.code]] = false; e.preventDefault(); } });
 
-  // Pointer lock for mouse-yaw; click the canvas to engage.
-  canvas.addEventListener('click', () => { if (!state.locked) canvas.requestPointerLock?.(); });
-  document.addEventListener('pointerlockchange', () => {
-    state.locked = document.pointerLockElement === canvas;
-  });
-  document.addEventListener('mousemove', (e) => {
-    if (state.locked) state.yaw += e.movementX;
+  document.addEventListener('pointerlockchange', () => { state.locked = document.pointerLockElement === canvas; });
+  document.addEventListener('mousemove', (e) => { if (state.locked) state.yaw += e.movementX; });
+
+  canvas.addEventListener('click', (e) => {
+    if (state.wantPointerLock && !state.locked) { canvas.requestPointerLock?.(); return; }
+    const { scale, offX, offY } = state.viewport;
+    state._clicks.push({ x: (e.clientX - offX) / scale, y: (e.clientY - offY) / scale });
   });
 
   return state;

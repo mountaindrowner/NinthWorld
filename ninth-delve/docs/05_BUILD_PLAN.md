@@ -24,8 +24,8 @@ Tasks: billboard sprite pass with z-buffer clip · pickups (shins/cyphers/odditi
 with E-interact + pickup modal (unidentified cypher text) · sliding doors ·
 glyph-locked door (inert) · secret bump-search on `wall_scuffed` cells · inventory
 in `GameState` · HUD v1: shins, cypher slots, compass.
-**Accept:** □ collect C1/O1, open every D door, L stays locked □ secret at ID-5
-found via interact □ sprites clip correctly behind walls.
+**Accept:** ☑ collect C1/O1, open every D door, L stays locked ☑ secret at ID-5
+found via interact ☑ sprites clip correctly behind walls.
 
 ## M3 — The dice (1 session) ← the heart
 Tasks: `dice.js` pure `resolveTask()` with audit trail (base, chips, effort,

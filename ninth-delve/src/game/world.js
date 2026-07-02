@@ -3,8 +3,11 @@
 // helpers and the door/key connectivity proof required by the build plan.
 
 import {
-  MAP, MAP_W, MAP_H, CELL, PLACEMENTS, ZONES, MURALS,
+  MAP, MAP_W, MAP_H, CELL, PLACEMENTS, ZONES, MURALS, DOORS,
 } from '../data/map_whisperlock.js';
+import { ODDITIES, ARTIFACT } from '../data/cyphers_oddities.js';
+import { awardXP, logEvent, overLimit } from './state.js';
+import { visiblePickups } from './entities.js';
 
 const N4 = [[1, 0], [-1, 0], [0, 1], [0, -1]];
 const keyOf = (x, y) => y * MAP_W + x;
@@ -50,20 +53,148 @@ export function wallTextureKey(x, y) {
   return 'wall_synth';
 }
 
+// --- M2: doors, state-aware solidity, interaction --------------------------
+
+const OPEN_DIST = 1.9;   // door auto-opens within this range (tiles)
+const DOOR_SPEED = 4;    // slide fraction per second (≈0.25 s open/close)
+
+/** Which S cells open by bump-search (guard a sealed:'bump' placement). */
+const BUMP_SECRETS = new Set();
+for (const p of PLACEMENTS) {
+  if (p.sealed !== 'bump') continue;
+  for (const [dx, dy] of N4) if (cellAt(p.x + dx, p.y + dy) === CELL.SECRET) BUMP_SECRETS.add(keyOf(p.x + dx, p.y + dy));
+}
+
+/** Door slide fraction 0..1 (0 closed). L follows the glyph solve. */
+export function doorSlide(state, x, y) {
+  const c = cellAt(x, y);
+  if (c === CELL.LOCK) return state.glyph.solved ? 1 : 0;
+  if (c !== CELL.DOOR) return 0;
+  return state.doors[keyOf(x, y)]?.t ?? 0;
+}
+
+/** Does a ray stop here, accounting for opened doors/secrets? */
+export function renderSolidAt(state, x, y) {
+  const c = cellAt(x, y);
+  if (c === CELL.SECRET && state.secretsFound.has(keyOf(x, y))) return false;
+  if (c === CELL.DOOR && doorSlide(state, x, y) >= 1) return false;
+  if (c === CELL.LOCK && state.glyph.solved) return false;
+  return isRenderSolid(x, y);
+}
+
+/** Movement blocking (state-aware): doors block until half-open, chasm until crossing. */
+export function blockedAt(state, x, y) {
+  const c = cellAt(x, y);
+  if (c === CELL.WALL || c === ' ' || c === CELL.PILLAR) return true;
+  if (c === CELL.SECRET) return !state.secretsFound.has(keyOf(x, y));
+  if (c === CELL.DOOR) return doorSlide(state, x, y) < 0.5;
+  if (c === CELL.LOCK) return !state.glyph.solved;
+  if (c === CELL.CHASM) return !state.player.crossing;
+  return false;
+}
+
 /**
- * Move a {x,y} entity by (dx,dy) with circle-slide collision (r=0.3). Axes are
- * resolved independently so we slide along walls instead of clipping corners.
+ * Move the player by (dx,dy) with circle-slide collision (r=0.3), axes resolved
+ * independently so we slide along walls instead of clipping corners.
  */
-export function moveWithCollision(p, dx, dy) {
+export function moveWithCollision(state, p, dx, dy) {
   const r = 0.3;
   const blocked = (fx, fy) => {
     for (const [ox, oy] of [[-r, -r], [r, -r], [-r, r], [r, r]]) {
-      if (isBlocking(Math.floor(fx + ox), Math.floor(fy + oy))) return true;
+      if (blockedAt(state, Math.floor(fx + ox), Math.floor(fy + oy))) return true;
     }
     return false;
   };
   if (!blocked(p.x + dx, p.y)) p.x += dx;
   if (!blocked(p.x, p.y + dy)) p.y += dy;
+}
+
+/** Animate doors: auto-open within range, slide closed otherwise. */
+export function updateDoors(state, dt) {
+  for (const [x, y] of DOORS) {
+    const k = keyOf(x, y);
+    const d = state.doors[k] || (state.doors[k] = { t: 0 });
+    const near = Math.hypot(state.player.x - (x + 0.5), state.player.y - (y + 0.5)) < OPEN_DIST;
+    const target = near ? 1 : 0;
+    if (d.t < target) d.t = Math.min(1, d.t + DOOR_SPEED * dt);
+    else if (d.t > target) d.t = Math.max(0, d.t - DOOR_SPEED * dt);
+  }
+}
+
+/** Compass label for a facing angle. */
+export function facingLabel(angle) {
+  const a = ((angle % (Math.PI * 2)) + Math.PI * 2) % (Math.PI * 2);
+  if (a < Math.PI / 4 || a >= (7 * Math.PI) / 4) return 'E';
+  if (a < (3 * Math.PI) / 4) return 'S';
+  if (a < (5 * Math.PI) / 4) return 'W';
+  return 'N';
+}
+
+/** Cell directly in front of the player (for interact). */
+function frontCell(p) {
+  const fx = p.x + Math.cos(p.angle) * 0.9;
+  const fy = p.y + Math.sin(p.angle) * 0.9;
+  return [Math.floor(fx), Math.floor(fy)];
+}
+
+/**
+ * E-interact: collect the nearest pickup, else bump-search a scuffed wall ahead.
+ * @returns {?Object} a modal descriptor for main.js, or null if nothing happened.
+ */
+export function interact(state) {
+  const p = state.player;
+  // nearest collectable pickup
+  let best = null, bestD = 0.9 * 0.9;
+  for (const e of visiblePickups(state)) {
+    const d = (e.x - p.x) ** 2 + (e.y - p.y) ** 2;
+    if (d < bestD) { bestD = d; best = e; }
+  }
+  if (best) return collectPickup(state, best);
+
+  // bump-search a secret wall in front
+  const [fx, fy] = frontCell(p);
+  const k = keyOf(fx, fy);
+  if (cellAt(fx, fy) === CELL.SECRET && BUMP_SECRETS.has(k) && !state.secretsFound.has(k)) {
+    return revealSecret(state, fx, fy);
+  }
+  return null;
+}
+
+function collectPickup(state, e) {
+  e.taken = true;
+  const p = state.player;
+  if (e.ptype === 'shins') {
+    p.shins += e.shins;
+    logEvent(state, `+${e.shins} shins`);
+    return { kind: 'pickup', title: 'shins', text: `You pocket ${e.shins} shins.` };
+  }
+  if (e.ptype === 'cypher') {
+    p.cyphers.push(e.cypher);
+    const warn = overLimit(state) ? 'Over your cypher limit — the numenera grows restless.' : '';
+    return { kind: 'pickup', title: 'unidentified cypher', text: e.cypher.unidName, sub: warn };
+  }
+  if (e.ptype === 'artifact') {
+    state.keyTaken = true;
+    awardXP(state, ARTIFACT.xp, 'artifact');
+    return { kind: 'pickup', title: ARTIFACT.name, text: ARTIFACT.text };
+  }
+  // oddity
+  const odd = ODDITIES[e.oddity] || { name: e.oddity, text: '', xp: 1 };
+  p.oddities.push(e.oddity);
+  if (odd.xp) awardXP(state, odd.xp, `oddity:${e.oddity}`);
+  return { kind: 'pickup', title: odd.name, text: odd.text };
+}
+
+function revealSecret(state, x, y) {
+  const k = keyOf(x, y);
+  state.secretsFound.add(k);
+  state.stats.secrets += 1;
+  // unhide the loot behind it (entities tagged with the guarded placement's group)
+  const placement = PLACEMENTS.find((p) => p.sealed === 'bump' && Math.abs(p.x - x) + Math.abs(p.y - y) === 1);
+  if (placement) for (const e of state.entities) if (e.group === placement.id) e.hidden = false;
+  awardXP(state, 2, `secret:${placement ? placement.id : k}`);
+  logEvent(state, 'A scuffed panel gives way.');
+  return { kind: 'secret', title: 'hidden cache', text: 'The scratched wall was hollow. Something waits behind it.' };
 }
 
 // Cells a walker can stand on for the connectivity graph. Doors always open;

@@ -98,3 +98,58 @@ nearer). Then pickups (E-interact + unidentified-cypher modal), sliding-door
 open logic (make D non-blocking only while animating open; add the u-offset
 slide), the inert glyph-locked door, secret bump-search on `wall_scuffed` cells,
 inventory in GameState, and HUD v1 (shins / cypher slots / compass).
+
+## 2026-07-02 — M2 complete
+Done:
+- Data: `pregen_kave.js` (Rules §7), `creatures.js` (§4 stat contract),
+  `cyphers_oddities.js` (§6, level 1d6+X at boot, unidentified instances).
+- `game/state.js`: the single mutable GameState + `awardXP`/`logEvent`/`overLimit`.
+- `game/dice.js`: pure seedable RNG + `resolveTask` audit trail + `specialOf`
+  (nat 1/17/18/19/20) + `rollRecovery` (written now; the tray/combat wire it in M3+).
+- `game/entities.js`: `spawnExploreEntities` from the placement table — creature
+  billboards + loot pickups; sealed-wall loot spawns `hidden`.
+- `raycaster.js`: billboard sprite pass with a per-column z-buffer (back-to-front
+  sort, per-column occlusion clip, fog, floor-anchored, boss 96px = 1.5 cells),
+  and door u-offset slide; DDA now uses state-aware `renderSolidAt` so open doors
+  let rays pass.
+- `world.js` grew M2: `doorSlide`, `renderSolidAt`, `blockedAt`, `updateDoors`
+  (auto-open within 1.9 tiles, ~0.25 s slide), `interact` (nearest pickup, else
+  bump-search a scuffed secret), `revealSecret`, `facingLabel` compass.
+- `input.js` rewritten: E = interact (edge), Q/arrows turn fallback, buffer-space
+  click translation, number/enter/esc/tab key buffer for menus.
+- `ui/widgets.js` (shared immediate-mode primitives), `ui/hud.js` (portrait
+  face-bar, pool bars, damage track, cypher slots w/ over-limit, shins, XP,
+  compass, event ticker), `ui/menus.js` (`drawModal`, incl. choice buttons for
+  later intrusion/examine modals).
+- `main.js`: EXPLORE↔MODAL loop; per-frame click/key lists; mode captured at
+  frame start so the E that opens a modal can't also dismiss it.
+
+Deviations/Doc issues:
+- **Kave starts with 0 cyphers** (empty slots, limit 2). Rules §7 lists book
+  pregen cyphers (rejuvenator/density nodule) but the §3.1 placement table also
+  puts those exact two in the dungeon as C1 (@#6) and C4 (@den). To honor the
+  discovery pillar and the placements, they are FOUND unidentified, not carried.
+  Flagging the §7↔§3.1 overlap; suggest §7 note "starting cyphers are the
+  dungeon's C1/C4, found in play".
+- Doors **auto-open on proximity** (rather than requiring an explicit E) for
+  smooth exploration; E-interact is reserved for pickups + bump-search. L stays
+  closed/inert until `glyph.solved` (M6). Chasm still blocks (M6).
+- Added `src/ui/widgets.js` — shared UI primitives, not in the §2 layout. Small,
+  justified; the four §2 UI modules build on it.
+
+Playtest notes:
+- `?seed=7`, headless: teleport-onto-pickup + E → cypher enters inventory and the
+  "unidentified cypher — a cold ampoule that squirms" modal shows (C1 sensory
+  name correct); Enter dismisses → EXPLORE. Bump-search at (3.5,17.5) facing E
+  revealed secret #5 and unhid its loot. Door (2,18) auto-opened to t=1.0 within
+  0.5 s. HUD renders full (pools 14/12/8, HALE, 1/2 cyphers, 5 shins). `?test=1`
+  suite PASS, no JS errors. (~39 fps headless with sprites+HUD+modal.)
+
+Next: M3 — The dice (the heart). `player.js`: Effort cost math (3/5/7 −Edge once
+per action; Speed-Effort armor surcharge +1/level; Impaired +1/level), pool
+spend/overflow (Might→Speed→Intellect) with damage-track transitions, recovery
+roll + daily rest sequence. `ui/dicetray.js`: chips from `resolveTask`, animated
+d20 (d20_strip), result banner, Effort spend buttons with live cost preview,
+character sheet (Tab). Wire a standalone "practice roll" in EXPLORE to exercise
+the tray before M4 combat. Add dice-math unit tables to `?test=1` (Effort 1/2 on
+Might = 2/4 for Edge 1; on Speed = 3/6 with armor; pool-0 overflow + track drop).
