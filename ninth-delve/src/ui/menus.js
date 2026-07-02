@@ -5,7 +5,10 @@
 import { PALETTE } from '../engine/texgen.js';
 import { panel, text, wrapText, button, bar } from './widgets.js';
 import { KAVE } from '../data/pregen_kave.js';
-import { availableActions, playerAction } from '../game/combat.js';
+import { availableActions, playerAction, useCypherInCombat, examineInCombat } from '../game/combat.js';
+import { useCypher, examineSpec, applyExamine } from '../game/cyphers.js';
+import { openTray } from './dicetray.js';
+import { logEvent } from '../game/state.js';
 
 const BUF_W = 320, BUF_H = 200;
 
@@ -24,11 +27,49 @@ export function drawEncounterMenu(ctx, state, clicks, keys) {
   if (e.phase !== 'player') { text(ctx, '… enemy phase', 10, y + 2, { size: 8, color: PALETTE.rust }); return; }
 
   const acts = availableActions(state);
-  let bx = 4, by = 150; const bw = 100, bh = 14; let col = 0;
+  let bx = 2, by = 130; const bw = 76, bh = 14; let col = 0;
   acts.forEach((act, i) => {
     if (button(ctx, { x: bx, y: by, w: bw, h: bh, label: act.label, hotkey: `Digit${i + 1}`, disabled: act.disabled }, clicks, keys)) playerAction(state, act.id);
-    if (++col === 3) { col = 0; bx = 4; by += bh + 2; } else bx += bw + 4;
+    if (++col === 4) { col = 0; bx = 2; by += bh + 2; } else bx += bw + 4;
   });
+}
+
+/**
+ * Cypher list (mode==='CYPHERS'): Use / Examine each carried cypher, from either
+ * explore (context 'explore') or a fight ('combat', consumes the turn).
+ * Returns true when the menu should close.
+ */
+export function drawCypherMenu(ctx, state, clicks, keys) {
+  const cm = state.cypherMenu;
+  const cy = state.player.cyphers;
+  const w = 240, h = 44 + Math.max(1, cy.length) * 20, x = (BUF_W - w) / 2, y = 24;
+  panel(ctx, x, y, w, h, 'cyphers');
+
+  if (!cy.length) text(ctx, 'You carry no cyphers.', x + 10, y + 30, { size: 8, color: PALETTE.boneShadow });
+  let ry = y + 24;
+  for (let i = 0; i < cy.length; i++) {
+    const c = cy[i];
+    const name = c.identified ? `${c.trueName} (L${c.level})` : c.unidName;
+    text(ctx, name, x + 8, ry + 10, { size: 8, color: c.identified ? PALETTE.goldGlow : PALETTE.boneLight });
+    if (button(ctx, { x: x + w - 108, y: ry, w: 48, h: 14, label: 'Use', hotkey: `Digit${i + 1}` }, clicks, keys)) { closeCyphers(state); doUse(state, cm, i); return true; }
+    if (!c.identified && button(ctx, { x: x + w - 56, y: ry, w: 48, h: 14, label: 'Exam' }, clicks, keys)) { closeCyphers(state); doExamine(state, cm, i); return true; }
+    ry += 20;
+  }
+  if (button(ctx, { x: x + w - 56, y: y + h - 20, w: 48, h: 14, label: 'Close', hotkey: 'Enter' }, clicks, keys)) { closeCyphers(state); return true; }
+  if (keys.includes('Escape') || keys.includes('KeyC')) { closeCyphers(state); return true; }
+  return false;
+}
+
+function closeCyphers(state) { state.mode = state.cypherMenu?.ret || 'EXPLORE'; state.cypherMenu = null; }
+
+function doUse(state, cm, idx) {
+  if (cm.context === 'combat') { useCypherInCombat(state, idx); return; }
+  logEvent(state, useCypher(state, idx)); // explore use — no turn
+}
+
+function doExamine(state, cm, idx) {
+  if (cm.context === 'combat') { examineInCombat(state, idx); return; }
+  openTray(state, examineSpec(state, idx), (a) => logEvent(state, applyExamine(state, idx, a)));
 }
 
 /** Character sheet (Tab). Returns true when dismissed. */

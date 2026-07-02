@@ -232,3 +232,48 @@ random carried cypher level, Might-defense touch, repositioning, telegraph).
 identity). Multi-enemy encounters. Over-limit rule (intrusion on nat 1–2).
 Add roster/boss checks to `?test=1` (hound hits through Armor; boss drains a
 hoarded cypher by round 3 in a no-use run; all six cyphers function).
+
+## 2026-07-02 — M5 complete
+Done:
+- `game/cyphers.js`: USE effects for all six (rejuvenate/detonation/gravity/
+  density/phase/stim), `examineSpec`/`applyExamine` (hindered Intellect + murden
+  static), `drainRandomCypher` (Abykos §7). `world.js`: `phaseFront` (C5 opens a
+  wall / phase-sealed vault).
+- `combat.js` roster specials: Abykos Drain each round start (destroys a hoarded
+  cypher, forces cypher use), reposition (phases to Short), Might-defense touch +
+  nat-1 Might drain; **phase-lunge ignores Armor** (Appendix REQUIRED — without
+  it 3−3=0 and hounds tickle); murden snatch-and-flee (steals a cypher, drops it
+  on death, recoverable) + telepathic-static Intellect hinder; hound phase-behind
+  (next defense hindered); over-limit rule (intrusion on nat 1–2). Use/Examine
+  are combat actions (consume the turn).
+- `ui/menus.js`: `drawCypherMenu` (Use/Examine each cypher, explore or combat);
+  encounter menu reflowed to 8 actions (4×2). `main.js`: CYPHERS mode + `C` key.
+- Multi-enemy encounters work (nest pulls murden×2 + laak, + a nearby scout).
+- `?test=1` roster & cypher tables added.
+
+Deviations/Doc issues:
+- **Laak explore aggro lowered 4→3** (a value I invented; the doc gives no explore
+  aggro range). At 4 the tutorial laak was inside aggro at the spawn tile and the
+  fight fired on frame 1; at 3 it triggers when the player steps toward it.
+- Detonation "target's Immediate" is modeled as all enemies sharing the target's
+  range band (bands are the spatial model, Rules §3.2).
+- Murden snatch fires as its intrusion on a failed/over-limit defense; the murden
+  then leaves the fight (flees) and its stolen cypher drops as a pickup when it's
+  later killed. Explore hound den-phasing (patrolling through S walls) is not
+  simulated — hounds are stationary billboards until engaged (noted for M6/polish).
+
+Playtest notes:
+- `?seed=5`, headless: `?test=1` roster & cyphers PASS (phase-lunge through Armor;
+  Abykos physical 3 / energy 0; C1–C6 all function; Drain L2→1→destroyed). Nest
+  triggers a 4-enemy fight. Boss Drain run (Defend only): carried cypher levels
+  12→8 across rounds — the boss eats hoarded cyphers by round 3. Boss renders
+  (translucent static, 15/15). 60 fps, no errors.
+
+Next: M6 — Systems of consequence. `intrusions.js` + `data/intrusion_tables.js`:
+global/zone/creature tables + the 5 scripted intrusions (Dungeon §8), accept
++2 XP / refuse −1 modal (can't refuse at 0). Wire the nat-1 stub in combat to the
+real table. XP ledger already feeds the tray reroll. Glyph puzzle (pillar rotate,
+O2/mural/Intellect clue paths, wrong-attempt intrusion) opening L. Chasm traversal
+(C3 path + climb rolls). Phase vault via C5 / den wall (phaseFront already opens
+it). Discovery XP on zone entry/secrets/artifact (zone-entry XP still TODO). Key
+pickup → exit unlock (keyTaken already set; wire X to require it).

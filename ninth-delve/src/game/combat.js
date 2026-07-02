@@ -5,9 +5,10 @@
 
 import { CREATURES, armorVs } from '../data/creatures.js';
 import { KAVE } from '../data/pregen_kave.js';
-import { logEvent } from './state.js';
-import { applyDamage, payCost, abilityCost, recover, isDead, isImpaired } from './player.js';
+import { logEvent, overLimit } from './state.js';
+import { applyDamage, payCost, abilityCost, recover, isDead } from './player.js';
 import { tileDist, hasLOS } from './world.js';
+import { drainRandomCypher, useCypher, examineSpec, applyExamine } from './cyphers.js';
 import { openTray } from '../ui/dicetray.js';
 
 const BANDS = ['immediate', 'short', 'long'];
@@ -65,10 +66,21 @@ function beginRound(state) {
   const e = state.encounter;
   if (checkEnd(state)) return;
   e.round += 1;
+  // Abykos Drain (§7): each round start, sap a random carried cypher's level.
+  const boss = e.enemies.find((en) => en.alive && en.id === 'abykos');
+  if (boss && state.player.cyphers.length) {
+    logEvent(state, 'The Abykos telegraphs: it drinks what you carry.');
+    drainRandomCypher(state, boss.surge ? 2 : 1);
+    boss.surge = false;
+  }
   e.seq = e.playerFirst ? ['player', 'enemy'] : ['enemy', 'player'];
   e.seqI = 0;
   runPhase(state);
 }
+
+/** Intrusion fires on natural 1, or natural 1–2 while over the cypher limit (Rules §9). */
+const intrusionTriggered = (state, audit) =>
+  audit.special?.effect === 'intrusion' || (overLimit(state) && audit.natural === 2);
 
 function runPhase(state) {
   const e = state.encounter;
@@ -108,6 +120,7 @@ export function playerAction(state, id) {
   if (id === 'fleet') { for (const en of living(state)) en.band = closer(en.band); logEvent(state, 'Fleet of Foot — you close the distance.'); consume(state); return; }
   if (id === 'flee') { doFlee(state); return; }
   if (id === 'attack') { doAttack(state); return; }
+  if (id === 'use' || id === 'examine') { state.cypherMenu = { context: 'combat', mode: id, ret: 'ENCOUNTER' }; state.mode = 'CYPHERS'; return; }
 }
 
 function consume(state) { state.encounter.acted = true; runPhase(state); }
@@ -131,7 +144,7 @@ function doAttack(state) {
 }
 
 function resolveAttack(state, enemy, weapon, a) {
-  if (a.special?.effect === 'intrusion') { logEvent(state, 'Natural 1 — the GM smiles.'); return; } // M6 real intrusion
+  if (intrusionTriggered(state, a)) { logEvent(state, 'The GM smiles — a twist against you.'); return; } // full table M6
   if (!a.success) { logEvent(state, `You miss the ${enemy.name}.`); return; }
 
   let dmg = weapon.damage + state.player.weaponBonus;
@@ -145,9 +158,16 @@ function resolveAttack(state, enemy, weapon, a) {
   dmg = Math.max(0, dmg - armor);
   enemy.hp -= dmg;
   logEvent(state, `You hit the ${enemy.name} for ${dmg}${armor ? ` (−${armor} Armor)` : ''}.`);
-  if (enemy.hp <= 0) {
-    enemy.alive = false; enemy.ent.alive = false; state.stats.kills += 1;
-    logEvent(state, `The ${enemy.name} falls.`);
+  if (enemy.hp <= 0) killEnemy(state, enemy);
+}
+
+function killEnemy(state, enemy) {
+  enemy.alive = false; enemy.ent.alive = false; state.stats.kills += 1;
+  logEvent(state, `The ${enemy.name} falls.`);
+  if (enemy.ent.stolen) { // recover a snatched cypher from its body
+    state.entities.push({ uid: Date.now() + enemy.ent.uid, kind: 'pickup', ptype: 'cypher', sprite: 'pickup_cypher', x: enemy.ent.x, y: enemy.ent.y, cypher: enemy.ent.stolen });
+    enemy.ent.stolen = null;
+    logEvent(state, 'It drops what it stole.');
   }
 }
 
@@ -193,9 +213,11 @@ function enemyAttack(state, enemy) {
   const hinders = [];
   if (p.aggression) hinders.push({ label: 'Aggression', steps: 1 });
   if (enemy.id === 'laak' && livingLaaks(state) >= 2) hinders.push({ label: 'skitter', steps: 1 });
+  if (p.nextDefenseHinder) { hinders.push({ label: 'phased behind', steps: 1 }); p.nextDefenseHinder = false; }
 
   openTray(state, { label: `defend vs ${enemy.name} (${stat})`, base: enemy.level, eases, hinders, stat }, (a) => {
     resolveDefense(state, enemy, a);
+    if (enemy.def.special.includes('reposition') && enemy.alive) enemy.band = 'short'; // Abykos phases away
     processEnemy(state);
   });
 }
@@ -207,12 +229,48 @@ function resolveDefense(state, enemy, a) {
     else logEvent(state, `You evade the ${enemy.name}.`);
     return;
   }
-  // failed defense → take the hit
-  const ignoresArmor = enemy.def.special.includes('phase_lunge') && enemy.id === 'hound'; // M5 nuance
+  // failed defense → take the hit (phase-lunge ignores Armor — Appendix REQUIRED)
+  const ignoresArmor = enemy.def.special.includes('phase_lunge');
   const armor = ignoresArmor ? 0 : Math.max(0, p.armor - p.armorPenalty);
   const dmg = Math.max(0, enemy.damage - armor);
   applyDamage(p, dmg);
-  logEvent(state, `The ${enemy.name} hits you for ${dmg}${a.special?.effect === 'intrusion' ? ' — the GM smiles' : ''}.`);
+  logEvent(state, `The ${enemy.name} hits you for ${dmg}${ignoresArmor ? ' (through Armor)' : ''}.`);
+  if (intrusionTriggered(state, a)) creatureIntrusion(state, enemy);
+}
+
+/** Creature intrusions on a failed/nat-1 defense (M5 roster; full economy M6). */
+function creatureIntrusion(state, enemy) {
+  const p = state.player;
+  if (enemy.id === 'murden' && p.cyphers.length) {
+    const i = Math.floor(state.rng() * p.cyphers.length);
+    enemy.stolen = p.cyphers.splice(i, 1)[0];
+    enemy.ent.stolen = enemy.stolen;    // recover it from its body/nest
+    enemy.alive = false;                // snatch-and-flee: leaves the fight
+    logEvent(state, `The murden snatches your ${enemy.stolen.identified ? enemy.stolen.trueName : 'cypher'} and bolts!`);
+  } else if (enemy.id === 'hound') {
+    p.nextDefenseHinder = true;
+    logEvent(state, 'The hound phases behind you — your next defense is hindered.');
+  } else if (enemy.id === 'abykos') {
+    applyDamage(p, 2); // touch drains a flat 2 Might on a nat-1 defense
+    logEvent(state, 'Static crawls up the armor straps — 2 Might drained.');
+  } else {
+    logEvent(state, 'The GM smiles.');
+  }
+}
+
+// --- cypher actions in combat (consume the turn) ------------------------------
+
+export function useCypherInCombat(state, idx) {
+  const summary = useCypher(state, idx, state.encounter);
+  logEvent(state, summary);
+  consume(state);
+}
+
+export function examineInCombat(state, idx) {
+  openTray(state, examineSpec(state, idx), (a) => {
+    logEvent(state, applyExamine(state, idx, a));
+    consume(state);
+  });
 }
 
 // --- end conditions ----------------------------------------------------------
@@ -250,10 +308,13 @@ export function availableActions(state) {
   if (!e || e.phase !== 'player') return [];
   const near = nearestEnemy(state);
   const canAttack = near && (near.band === 'immediate' || near.band === 'short');
+  const p = state.player;
   return [
-    { id: 'attack', label: canAttack ? 'Attack' : 'Attack (too far)', disabled: !canAttack },
+    { id: 'attack', label: canAttack ? 'Attack' : 'Attack (far)', disabled: !canAttack },
     { id: 'fleet', label: 'Fleet of Foot' },
-    { id: 'aggression', label: state.player.aggression ? 'Aggression ✓' : 'Aggression' },
+    { id: 'aggression', label: p.aggression ? 'Aggression ✓' : 'Aggression' },
+    { id: 'use', label: 'Use cypher', disabled: p.cyphers.length === 0 },
+    { id: 'examine', label: 'Examine', disabled: !p.cyphers.some((c) => !c.identified) },
     { id: 'catch', label: 'Catch Breath' },
     { id: 'defend', label: 'Defend' },
     { id: 'flee', label: 'Flee' },

@@ -8,10 +8,12 @@ import { spawnExploreEntities } from './game/entities.js';
 import { connectivityTest, moveWithCollision, updateDoors, interact } from './game/world.js';
 import { effortCost, applyDamage } from './game/player.js';
 import { maybeTrigger } from './game/combat.js';
+import { useCypher, drainRandomCypher } from './game/cyphers.js';
+import { CREATURES, armorVs } from './data/creatures.js';
 import { render as renderView } from './engine/raycaster.js';
 import { createInput } from './engine/input.js';
 import { drawHud } from './ui/hud.js';
-import { drawModal, drawSheet, drawEncounterMenu } from './ui/menus.js';
+import { drawModal, drawSheet, drawEncounterMenu, drawCypherMenu } from './ui/menus.js';
 import { openTray, updateTray, drawTray } from './ui/dicetray.js';
 import { drawReport } from './ui/report.js';
 import { KAVE } from './data/pregen_kave.js';
@@ -118,6 +120,7 @@ function loop(now) {
     updateExplore(dt);
     if (keys.includes('KeyR')) practiceRoll();
     else if (keys.includes('Tab')) { state.mode = 'SHEET'; document.exitPointerLock?.(); input.clearBuffered(); }
+    else if (keys.includes('KeyC')) { state.cypherMenu = { context: 'explore', ret: 'EXPLORE' }; state.mode = 'CYPHERS'; document.exitPointerLock?.(); input.clearBuffered(); }
   } else if (modeAtStart === 'ROLL') {
     updateTray(state, dt);
   }
@@ -134,6 +137,8 @@ function loop(now) {
     if (drawSheet(buf, state, clicks, keys, assets)) { state.mode = 'EXPLORE'; input.clearBuffered(); }
   } else if (modeAtStart === 'ENCOUNTER' && state.mode === 'ENCOUNTER') {
     drawEncounterMenu(buf, state, clicks, keys);
+  } else if (modeAtStart === 'CYPHERS' && state.mode === 'CYPHERS') {
+    drawCypherMenu(buf, state, clicks, keys);
   } else if (state.mode === 'REPORT') {
     drawReport(buf, state, clicks, keys);
   }
@@ -180,6 +185,35 @@ function diceTests() {
   return c;
 }
 
+/** Roster + cypher tables (Dungeon §4/§6; CLAUDE.md acceptance for M5). */
+function rosterTests() {
+  const c = [];
+  const ok = (n, v) => c.push([n, v]);
+  ok('hound dmg 3 & has phase_lunge', CREATURES.hound.damage === 3 && CREATURES.hound.special.includes('phase_lunge'));
+  ok('phase-lunge REQUIRED: 3−3=0 tickles, ignore→3', Math.max(0, 3 - 3) === 0);
+  ok('abykos Armor: physical 3', armorVs(CREATURES.abykos, 'physical') === 3);
+  ok('abykos Armor: energy/cypher 0', armorVs(CREATURES.abykos, 'energy') === 0);
+
+  const mkState = () => ({
+    rng: () => 0.4, stats: { cyphersUsed: 0, kills: 0, secrets: 0 }, log: [],
+    entities: [], secretsFound: new Set(), phasedCells: new Set(), discoveredZones: new Set(),
+    player: { pools: { might: 10, speed: 12, intellect: 8 }, poolMax: { might: 14, speed: 12, intellect: 8 }, edge: { might: 1, speed: 1, intellect: 0 }, track: 'hale', weaponBonus: 0, stimRounds: 0, crossing: false, x: 1.5, y: 22.5, angle: Math.PI, cyphers: [] },
+  });
+  let s = mkState();
+  s.player.cyphers = [{ id: 'C4', effect: 'density', level: 3, identified: false, trueName: 'Density Nodule' }];
+  useCypher(s, 0); ok('C4 Density: +2 weapon, consumed', s.player.weaponBonus === 2 && s.player.cyphers.length === 0);
+  s.player.cyphers = [{ id: 'C6', effect: 'stim', level: 2, identified: false }]; useCypher(s, 0); ok('C6 Stim: 3 rounds', s.player.stimRounds === 3);
+  s.player.cyphers = [{ id: 'C3', effect: 'gravity', level: 4, identified: false }]; useCypher(s, 0); ok('C3 Gravity: chasm crossable', s.player.crossing === true);
+  s.player.cyphers = [{ id: 'C1', effect: 'rejuvenate', level: 2, identified: false, trueName: 'Rejuvenator' }]; useCypher(s, 0); ok('C1 Rejuvenator: heals Might', s.player.pools.might > 10);
+  s.player.cyphers = [{ id: 'C5', effect: 'phase', level: 3, identified: false }]; useCypher(s, 0); ok('C5 Phase: opens a wall', s.phasedCells.size === 1);
+  const combat = { enemies: [{ alive: true, band: 'immediate', hp: 3, def: CREATURES.laak, ent: { alive: true } }] };
+  s.player.cyphers = [{ id: 'C2', effect: 'detonation', level: 2, identified: false }]; s.encounter = combat;
+  useCypher(s, 0, combat); ok('C2 Detonation: energy damage kills laak', combat.enemies[0].hp <= 0);
+  s.player.cyphers = [{ id: 'C1', effect: 'rejuvenate', level: 2 }]; drainRandomCypher(s, 1); ok('Abykos Drain: L2→1', s.player.cyphers[0]?.level === 1);
+  drainRandomCypher(s, 1); ok('Abykos Drain: destroyed at 0', s.player.cyphers.length === 0);
+  return c;
+}
+
 function runTests() {
   console.log('%c[Ninth Delve] ?test=1', 'color:#4FE3C1;font-weight:bold');
   const conn = connectivityTest();
@@ -192,14 +226,20 @@ function runTests() {
   console.group(`dice math: ${dicePass ? 'PASS ✓' : 'FAIL ✗'}`);
   dice.forEach(([name, ok]) => console.log(`${ok ? '✓' : '✗'} ${name}`));
   console.groupEnd();
+
+  const roster = rosterTests();
+  const rosterPass = roster.every(([, ok]) => ok);
+  console.group(`roster & cyphers: ${rosterPass ? 'PASS ✓' : 'FAIL ✗'}`);
+  roster.forEach(([name, ok]) => console.log(`${ok ? '✓' : '✗'} ${name}`));
+  console.groupEnd();
   const unresolved = Object.entries(assets).filter(([, a]) => !a || !a.frames.length);
   const files = Object.values(assets).filter((a) => a.source === 'file').length;
   const fb = Object.values(assets).filter((a) => a.source === 'fallback').length;
   const assetsPass = unresolved.length === 0;
   console.log(`assets: ${assetsPass ? 'PASS ✓' : 'FAIL ✗'} — ${files} file / ${fb} fallback, ${unresolved.length} unresolved`);
-  const pass = conn.pass && assetsPass && dicePass;
+  const pass = conn.pass && assetsPass && dicePass && rosterPass;
   console.log(`%ctest suite: ${pass ? 'PASS ✓' : 'FAIL ✗'}`, `color:${pass ? '#4FE3C1' : '#7A1F2B'};font-weight:bold`);
-  window.__NINTH_TEST = { pass, connectivity: conn, assetsPass, dicePass };
+  window.__NINTH_TEST = { pass, connectivity: conn, assetsPass, dicePass, rosterPass };
 }
 
 async function boot() {

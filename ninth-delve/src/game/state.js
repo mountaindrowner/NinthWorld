@@ -40,9 +40,12 @@ export function createGameState(rng, seed) {
       weaponBonus: 0,             // Density Nodule: +2 damage rest of delve
       restsUsed: 0,               // daily recovery sequence index (0..3)
       armorPenalty: 0,            // Z2 intrusion: −1 armor until rest
+      crossing: false,            // Gravity Nullifier (C3): chasm traversable
+      nextDefenseHinder: false,   // hound phase-behind intrusion
     },
     discoveredZones: new Set(),
     secretsFound: new Set(),
+    phasedCells: new Set(),       // wall cells opened by the Phase Disruptor (C5)
     doors: {},                    // "x,y" -> {open:boolean, t:0..1 slide}
     glyph: { rotation: [0, 0, 0], solved: false },
     entities: [],                 // explore pickups + creature billboards

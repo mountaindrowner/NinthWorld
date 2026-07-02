@@ -21,7 +21,7 @@
 export const CREATURES = {
   laak: {
     id: 'laak', name: 'laak', level: 1, target: 3, hp: 3, damage: 2, armor: 0,
-    moveBand: 'immediate', aggro: 4, sprite: 'laak',
+    moveBand: 'immediate', aggro: 3, sprite: 'laak',
     special: ['skitter'], // Speed defense vs it hindered if 2+ laaks present
     intrusion: 'laak_latch', // 1 ongoing dmg until Might task diff 2
   },

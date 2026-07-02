@@ -56,9 +56,9 @@ physical resist 3 / energy 0, per-round Drain of carried cypher levels, Might-
 defense touch, repositioning, telegraph lines · cypher USE effects for C1–C6 ·
 Examine action (hindered Intellect, reveals identity) · over-limit rule (intrusion
 on nat 1–2).
-**Accept:** □ murden steals a cypher and it's recoverable □ hound hits through
-Armor via phase-lunge □ boss destroys a hoarded cypher by round 3 in a no-use
-test run □ all six cyphers function per Dungeon §6.
+**Accept:** ☑ murden steals a cypher and it's recoverable ☑ hound hits through
+Armor via phase-lunge ☑ boss destroys a hoarded cypher by round 3 in a no-use
+test run ☑ all six cyphers function per Dungeon §6.
 
 ## M6 — Systems of consequence (1 session)
 Tasks: intrusion engine (global/zone/creature tables + scripted five from Dungeon

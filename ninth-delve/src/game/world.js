@@ -84,6 +84,7 @@ export function renderSolidAt(state, x, y) {
 
 /** Movement blocking (state-aware): doors block until half-open, chasm until crossing. */
 export function blockedAt(state, x, y) {
+  if (state.phasedCells.has(keyOf(x, y))) return false; // Phase Disruptor opened it
   const c = cellAt(x, y);
   if (c === CELL.WALL || c === ' ' || c === CELL.PILLAR) return true;
   if (c === CELL.SECRET) return !state.secretsFound.has(keyOf(x, y));
@@ -91,6 +92,30 @@ export function blockedAt(state, x, y) {
   if (c === CELL.LOCK) return !state.glyph.solved;
   if (c === CELL.CHASM) return !state.player.crossing;
   return false;
+}
+
+/**
+ * Phase Disruptor (C5): open the solid/secret cell directly in front so the
+ * player can step through one wall. Reveals loot behind a phase-sealed vault.
+ * @returns {boolean} whether a wall was phased
+ */
+export function phaseFront(state) {
+  const p = state.player;
+  const fx = Math.floor(p.x + Math.cos(p.angle) * 0.9);
+  const fy = Math.floor(p.y + Math.sin(p.angle) * 0.9);
+  const c = cellAt(fx, fy);
+  if (c !== CELL.WALL && c !== CELL.SECRET && c !== CELL.PILLAR) return false;
+  state.phasedCells.add(keyOf(fx, fy));
+  if (c === CELL.SECRET) {
+    state.secretsFound.add(keyOf(fx, fy));
+    const placement = PLACEMENTS.find((pl) => pl.sealed === 'phase' && Math.abs(pl.x - fx) + Math.abs(pl.y - fy) === 1);
+    if (placement) {
+      for (const e of state.entities) if (e.group === placement.id) e.hidden = false;
+      awardXP(state, 2, `secret:${placement.id}`);
+      state.stats.secrets += 1;
+    }
+  }
+  return true;
 }
 
 /**
