@@ -8,7 +8,10 @@ import { KAVE } from '../data/pregen_kave.js';
 import { availableActions, playerAction, useCypherInCombat, examineInCombat } from '../game/combat.js';
 import { useCypher, examineSpec, applyExamine } from '../game/cyphers.js';
 import { openTray } from './dicetray.js';
-import { logEvent } from '../game/state.js';
+import { logEvent, awardXP } from '../game/state.js';
+import { tableIntrusion } from '../game/intrusions.js';
+
+const GLYPH_SYM = ['◇', '△', '▽', '▣'];
 
 const BUF_W = 320, BUF_H = 200;
 
@@ -70,6 +73,53 @@ function doUse(state, cm, idx) {
 function doExamine(state, cm, idx) {
   if (cm.context === 'combat') { examineInCombat(state, idx); return; }
   openTray(state, examineSpec(state, idx), (a) => logEvent(state, applyExamine(state, idx, a)));
+}
+
+/**
+ * Glyph puzzle (mode==='GLYPH', Dungeon §5): rotate three pillars to the correct
+ * triple. Clue comes from O2, the Z2 mural, or a hindered Intellect intuition —
+ * any one reveals the sequence. A wrong Attempt rolls the Z3 intrusion table.
+ * Returns true when the puzzle should close.
+ */
+export function drawGlyphPuzzle(ctx, state, clicks, keys) {
+  const g = state.glyph;
+  const w = 244, h = 132, x = (BUF_W - w) / 2, y = 22;
+  panel(ctx, x, y, w, h, 'whisper gallery — glyph lock');
+
+  for (let i = 0; i < 3; i++) {
+    const px = x + 42 + i * 68;
+    text(ctx, GLYPH_SYM[g.rotation[i]], px, y + 46, { size: 22, color: PALETTE.cyan, align: 'center' });
+    if (button(ctx, { x: px - 22, y: y + 54, w: 44, h: 14, label: 'Rotate', hotkey: `Digit${i + 1}` }, clicks, keys)) g.rotation[i] = (g.rotation[i] + 1) % 4;
+  }
+
+  const clue = state.player.oddities.includes('O2') || g.muralSeen || g.intuited;
+  if (clue) text(ctx, `clue:  ${g.correct.map((v) => GLYPH_SYM[v]).join('   ')}`, x + 12, y + 90, { size: 12, color: PALETTE.goldGlow });
+  else text(ctx, 'The sockets wait for a sequence you do not yet know.', x + 12, y + 90, { size: 8, color: PALETTE.boneShadow });
+
+  if (button(ctx, { x: x + 12, y: y + h - 22, w: 74, h: 16, label: 'Attempt', hotkey: 'Enter', accent: PALETTE.goldGlow }, clicks, keys)) return glyphAttempt(state);
+  if (!clue && button(ctx, { x: x + 92, y: y + h - 22, w: 88, h: 16, label: 'Intuit (Int)' }, clicks, keys)) { glyphIntuit(state); return false; }
+  if (button(ctx, { x: x + w - 56, y: y + h - 22, w: 48, h: 16, label: 'Close' }, clicks, keys)) return true;
+  return keys.includes('Escape');
+}
+
+function glyphAttempt(state) {
+  const g = state.glyph;
+  if (g.rotation.every((v, i) => v === g.correct[i])) {
+    g.solved = true; awardXP(state, 2, 'glyph');
+    logEvent(state, 'The glyphs align — the lock grinds open.');
+    return true;
+  }
+  logEvent(state, 'The sequence is wrong. Something stirs.');
+  tableIntrusion(state, { zone: 'Z3' }); // wrong-attempt intrusion
+  return true;
+}
+
+function glyphIntuit(state) {
+  // Intellect task diff 4, hindered by the numenera inability (effective 5, target 15).
+  openTray(state, { label: 'intuit the glyphs (Intellect)', base: 4, eases: [], hinders: [{ label: 'numenera inability', steps: 1 }], stat: 'intellect' }, (a) => {
+    if (a.success) { state.glyph.intuited = true; logEvent(state, 'The pattern resolves behind your eyes.'); }
+    else logEvent(state, 'The glyphs stay meaningless.');
+  });
 }
 
 /** Character sheet (Tab). Returns true when dismissed. */

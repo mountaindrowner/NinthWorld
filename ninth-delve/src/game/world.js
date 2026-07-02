@@ -8,6 +8,9 @@ import {
 import { ODDITIES, ARTIFACT } from '../data/cyphers_oddities.js';
 import { awardXP, logEvent, overLimit } from './state.js';
 import { visiblePickups } from './entities.js';
+import { applyDamage } from './player.js';
+import { openTray } from '../ui/dicetray.js';
+import { tableIntrusion, scriptedIntrusion, queueScripted } from './intrusions.js';
 
 const N4 = [[1, 0], [-1, 0], [0, 1], [0, -1]];
 const keyOf = (x, y) => y * MAP_W + x;
@@ -197,13 +200,44 @@ export function interact(state) {
   }
   if (best) return collectPickup(state, best);
 
-  // bump-search a secret wall in front
   const [fx, fy] = frontCell(p);
   const k = keyOf(fx, fy);
-  if (cellAt(fx, fy) === CELL.SECRET && BUMP_SECRETS.has(k) && !state.secretsFound.has(k)) {
-    return revealSecret(state, fx, fy);
-  }
+  const c = cellAt(fx, fy);
+  // bump-search a secret wall in front
+  if (c === CELL.SECRET && BUMP_SECRETS.has(k) && !state.secretsFound.has(k)) return revealSecret(state, fx, fy);
+  // glyph pillar → open the puzzle; chasm edge → start a climb
+  if (c === CELL.PILLAR) return { kind: 'glyph' };
+  if (c === CELL.CHASM && !p.crossing) return { kind: 'climb' };
   return null;
+}
+
+/**
+ * Chasm climb route (Dungeon §3.1): two Might climb tasks (diff 4, trained → 3)
+ * with a wandering Z4 intrusion between. Success opens the crossing; a slip costs
+ * 3. The other route is the Gravity Nullifier (C3), which just sets `crossing`.
+ */
+export function startClimb(state) {
+  // the Z4 handhold intrusion fires once before the first climb
+  if (!state.firedScripted?.has('Z4')) { scriptedIntrusion(state, 'Z4', () => climbRolls(state)); return; }
+  climbRolls(state);
+}
+
+function climbRolls(state) {
+  const p = state.player;
+  const climbSpec = (label) => ({
+    label, base: 4, stat: 'might',
+    eases: [{ label: 'trained climbing', steps: 1 }],
+    hinders: state.climbPenalty ? [{ label: 'crumbling hold', steps: 1 }] : [],
+  });
+  openTray(state, climbSpec('climb down (Might)'), (a) => {
+    if (!a.success) { applyDamage(p, 3); logEvent(state, 'You slip on the descent — 3 damage.'); return; }
+    tableIntrusion(state, { zone: 'Z4' }); // the wandering-intrusion roll
+    openTray(state, climbSpec('climb up (Might)'), (b) => {
+      if (!b.success) { applyDamage(p, 3); logEvent(state, 'You lose your grip on the ascent — 3 damage.'); return; }
+      p.crossing = true; state.climbPenalty = 0;
+      logEvent(state, 'You haul yourself up the far wall — the chasm is behind you.');
+    });
+  });
 }
 
 function collectPickup(state, e) {
@@ -222,6 +256,7 @@ function collectPickup(state, e) {
   if (e.ptype === 'artifact') {
     state.keyTaken = true;
     awardXP(state, ARTIFACT.xp, 'artifact');
+    queueScripted(state, 'Z5'); // the Key sparks (fires after this modal closes)
     return { kind: 'pickup', title: ARTIFACT.name, text: ARTIFACT.text };
   }
   // oddity

@@ -9,6 +9,7 @@ import { logEvent, overLimit } from './state.js';
 import { applyDamage, payCost, abilityCost, recover, isDead } from './player.js';
 import { tileDist, hasLOS } from './world.js';
 import { drainRandomCypher, useCypher, examineSpec, applyExamine } from './cyphers.js';
+import { tableIntrusion } from './intrusions.js';
 import { openTray } from '../ui/dicetray.js';
 
 const BANDS = ['immediate', 'short', 'long'];
@@ -254,7 +255,7 @@ function creatureIntrusion(state, enemy) {
     applyDamage(p, 2); // touch drains a flat 2 Might on a nat-1 defense
     logEvent(state, 'Static crawls up the armor straps — 2 Might drained.');
   } else {
-    logEvent(state, 'The GM smiles.');
+    tableIntrusion(state, { creature: enemy.id, zone: enemy.zone }); // e.g. laak latch
   }
 }
 

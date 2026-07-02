@@ -277,3 +277,49 @@ O2/mural/Intellect clue paths, wrong-attempt intrusion) opening L. Chasm travers
 (C3 path + climb rolls). Phase vault via C5 / den wall (phaseFront already opens
 it). Discovery XP on zone entry/secrets/artifact (zone-entry XP still TODO). Key
 pickup → exit unlock (keyTaken already set; wire X to require it).
+
+## 2026-07-02 — M6 complete
+Done:
+- `data/intrusion_tables.js` + `game/intrusions.js`: the five scripted intrusions
+  (accept +2 XP / refuse −1 XP; **refuse disabled at 0 XP**), a free nat-1 pool
+  (global/zone/creature), and a `queueScripted`/`pumpScripted` queue so multiple
+  scripted moments fire in sequence without clobbering. Combat nat-1 for generic
+  creatures now rolls the table (e.g. laak latch).
+- Glyph puzzle (`ui/menus.js drawGlyphPuzzle`, GLYPH mode): three pillars rotate;
+  correct triple (rolled at boot) opens L (+2 XP). Clue via **any** of O2 in
+  inventory / Z2 mural sighting / a hindered Intellect intuition (tray). Wrong
+  Attempt rolls the Z3 intrusion. Whisper-lie scripted fires on first open.
+- Chasm (`world.js`): C3 sets `crossing`; the climb route interacts on the edge →
+  Z4 handhold intrusion → two Might climb tasks (diff 4, trained −1) with a
+  wandering-intrusion roll between → `crossing`.
+- Phase vault: `phaseFront` (from M5) opens the C5-sealed vault / den wall.
+- Discovery XP: +1 per first zone entry, +2 secret, +2 glyph, +3 artifact,
+  +2 true clear. Mural sighting sets a glyph clue. Key → exit: stepping on X with
+  the Key ends the delve (REPORT, reason 'exit', +2 clear); without it, a prompt.
+- `main.js`: GLYPH mode, interact routing (glyph/climb/pickup/secret), modal
+  `onResolve` continuations, world-events + scripted pump each explore frame.
+
+Deviations/Doc issues:
+- Z1 "floor gives way" + Z2 "strap snaps" both fire on first entry to Z2 (queued
+  in order) rather than each precisely on its own trigger — the queue avoids
+  modal-clobber and keeps them near their thematic beats. Flagging as a minor
+  staging choice.
+- Wrong glyph attempt uses the free Z3 table intrusion (may deal 2 dmg / hound
+  ambush flavor) rather than the accept/refuse modal, matching "wrong-attempt
+  intrusion" as a penalty rather than an XP offer.
+
+Playtest notes:
+- `?seed=7`, headless: refuse disabled at 0 XP ✓; glyph solved via O2 clue ✓ and
+  mural clue ✓ (→ L opens, +2 XP); step on X with Key → REPORT('exit') ✓; C3
+  crossing walks the chasm (x 18.5→20.5) ✓; climb route fires the Z4 intrusion +
+  two Might climb trays ✓ (that run slipped — a normal roll outcome; the route is
+  completable). Confirmed the den hounds ambush anyone approaching the chasm
+  (encounter triggers on approach — intended). Suite still PASS, no errors.
+
+Next: M7 — Juice, audio, balance, report. `engine/audio.js` (WebAudio cues per
+Asset §5: step/door/dice/hit/hurt/cypher/drain/whisper/zone drones/glyph-motif).
+Whisper text system + the 9 script hooks (grieving-archivist, ≤2 sentences).
+Hit flashes, 2px/100ms screen shake, sprite lunge tweens. Full Delve Report
+(GDD §6: cyphers used vs hoarded, Tier-2 progress). Title screen. Balancing pass
+vs the Appendix targets. 3 logged playthroughs; ensure 20–40 min & no console
+errors across a full run.

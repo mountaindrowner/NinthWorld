@@ -43,11 +43,18 @@ export function createGameState(rng, seed) {
       crossing: false,            // Gravity Nullifier (C3): chasm traversable
       nextDefenseHinder: false,   // hound phase-behind intrusion
     },
-    discoveredZones: new Set(),
+    discoveredZones: new Set(),   // XP-source dedup keys (via awardXP)
+    visitedZones: new Set(),      // zones entered (discovery XP + scripted trigger)
+    firedScripted: new Set(),     // scripted intrusions already shown
     secretsFound: new Set(),
     phasedCells: new Set(),       // wall cells opened by the Phase Disruptor (C5)
     doors: {},                    // "x,y" -> {open:boolean, t:0..1 slide}
-    glyph: { rotation: [0, 0, 0], solved: false },
+    glyph: {
+      rotation: [0, 0, 0],
+      correct: [Math.floor(rng() * 4), Math.floor(rng() * 4), Math.floor(rng() * 4)],
+      solved: false, intuited: false, muralSeen: false, lie: false,
+    },
+    climbPenalty: 0,
     entities: [],                 // explore pickups + creature billboards
     encounter: null,              // combat state while mode==='ENCOUNTER'
     modal: null,                  // {kind, ...} while mode==='MODAL'

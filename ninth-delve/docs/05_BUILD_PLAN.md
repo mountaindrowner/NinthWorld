@@ -67,8 +67,8 @@ the tray · glyph puzzle (pillar rotation, O2/mural/Intellect clue paths, wrong-
 attempt intrusion) · chasm traversal (C3 path + climb path with rolls) · phase
 vault via C5/den wall · discovery XP awards on zone entry/secrets/artifact · Key
 pickup → exit unlock.
-**Accept:** □ both chasm routes completable □ puzzle solvable via all 3 clue paths
-□ refuse at 0 XP is disabled □ reroll consumes 1 XP and replays the same chips.
+**Accept:** ☑ both chasm routes completable ☑ puzzle solvable via all 3 clue paths
+☑ refuse at 0 XP is disabled ☑ reroll consumes 1 XP and replays the same chips.
 
 ## M7 — Juice, audio, balance, report (1 session)
 Tasks: WebAudio cues per Asset §5 · whisper text system + the 9 script hooks

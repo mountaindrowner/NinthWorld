@@ -3,17 +3,19 @@
 
 import { loadAssets, PALETTE } from './engine/texgen.js';
 import { makeRNG, resolveTask, specialOf } from './game/dice.js';
-import { createGameState, logEvent } from './game/state.js';
+import { createGameState, logEvent, awardXP } from './game/state.js';
 import { spawnExploreEntities } from './game/entities.js';
-import { connectivityTest, moveWithCollision, updateDoors, interact } from './game/world.js';
+import { connectivityTest, moveWithCollision, updateDoors, interact, startClimb, zoneAt, tileDist, hasLOS, cellAt } from './game/world.js';
 import { effortCost, applyDamage } from './game/player.js';
 import { maybeTrigger } from './game/combat.js';
 import { useCypher, drainRandomCypher } from './game/cyphers.js';
+import { pumpScripted, queueScripted, scriptedIntrusion } from './game/intrusions.js';
 import { CREATURES, armorVs } from './data/creatures.js';
+import { CELL, MURALS } from './data/map_whisperlock.js';
 import { render as renderView } from './engine/raycaster.js';
 import { createInput } from './engine/input.js';
 import { drawHud } from './ui/hud.js';
-import { drawModal, drawSheet, drawEncounterMenu, drawCypherMenu } from './ui/menus.js';
+import { drawModal, drawSheet, drawEncounterMenu, drawCypherMenu, drawGlyphPuzzle } from './ui/menus.js';
 import { openTray, updateTray, drawTray } from './ui/dicetray.js';
 import { drawReport } from './ui/report.js';
 import { KAVE } from './data/pregen_kave.js';
@@ -54,9 +56,33 @@ let assets = null;
 
 function openModal(m) {
   state.modal = m;
+  state.prevMode = 'EXPLORE';
   state.mode = 'MODAL';
   document.exitPointerLock?.();
   input.clearBuffered();
+}
+
+const MURAL = MURALS[0]; // nest clue mural cell
+
+/** Discovery XP on first zone entry, mural sighting, and the exit gate. */
+function exploreWorldEvents() {
+  const p = state.player;
+  const zx = Math.floor(p.x), zy = Math.floor(p.y);
+  const z = zoneAt(zx, zy);
+  if (z && !state.visitedZones.has(z)) {
+    state.visitedZones.add(z);
+    awardXP(state, 1, `zone:${z}`);
+    if (z === 'Z2') { queueScripted(state, 'Z1'); queueScripted(state, 'Z2'); } // floor + strap
+  }
+  // mural sighting reveals a glyph clue path
+  if (!state.glyph.muralSeen && tileDist(p.x, p.y, MURAL[0] + 0.5, MURAL[1] + 0.5) < 2.4 && hasLOS(state, p.x, p.y, MURAL[0] + 0.5, MURAL[1] + 0.5)) {
+    state.glyph.muralSeen = true; logEvent(state, 'The nest mural shows a sequence of three glyphs.');
+  }
+  // exit gate: needs the Key (Dungeon §6)
+  if (cellAt(zx, zy) === CELL.EXIT) {
+    if (state.keyTaken) { awardXP(state, 2, 'clear'); state.reportReason = 'exit'; state.exited = true; state.mode = 'REPORT'; }
+    else if (!state.exitPrompted) { state.exitPrompted = true; logEvent(state, 'The exit is sealed — you need the Whisperlock Key.'); }
+  }
 }
 
 function updateExplore(dt) {
@@ -75,10 +101,22 @@ function updateExplore(dt) {
 
   if (input.takeInteract()) {
     const ev = interact(state);
-    if (ev) openModal(ev);
+    if (ev && ev.kind === 'glyph') openGlyph();
+    else if (ev && ev.kind === 'climb') { document.exitPointerLock?.(); startClimb(state); input.clearBuffered(); }
+    else if (ev) openModal(ev);
   }
 
-  maybeTrigger(state); // LOS + aggro → freeze into ENCOUNTER
+  exploreWorldEvents();
+  pumpScripted(state);          // fire any queued scripted intrusion when idle
+  if (state.mode === 'EXPLORE') maybeTrigger(state); // LOS + aggro → ENCOUNTER
+}
+
+function openGlyph() {
+  document.exitPointerLock?.();
+  input.clearBuffered();
+  // the whisper lies (Z3 scripted) fires once, then the puzzle opens
+  if (!state.firedScripted.has('Z3')) scriptedIntrusion(state, 'Z3', () => { state.mode = 'GLYPH'; });
+  else state.mode = 'GLYPH';
 }
 
 /** M3 demo: a full skill+asset+Effort attack roll to exercise the tray (R). */
@@ -130,11 +168,17 @@ function loop(now) {
   drawHud(buf, state, assets);
 
   if (modeAtStart === 'MODAL' && state.mode === 'MODAL') {
-    if (drawModal(buf, state, clicks, keys)) { state.modal = null; state.mode = 'EXPLORE'; input.clearBuffered(); }
+    if (drawModal(buf, state, clicks, keys)) {
+      const m = state.modal, back = state.prevMode || 'EXPLORE';
+      state.modal = null; state.prevMode = null; state.mode = back; input.clearBuffered();
+      m.onResolve?.(m.result); // intrusion accept/refuse + continuations
+    }
   } else if (modeAtStart === 'ROLL' && state.mode === 'ROLL') {
     drawTray(buf, state, clicks, keys, assets);
   } else if (modeAtStart === 'SHEET' && state.mode === 'SHEET') {
     if (drawSheet(buf, state, clicks, keys, assets)) { state.mode = 'EXPLORE'; input.clearBuffered(); }
+  } else if (modeAtStart === 'GLYPH' && state.mode === 'GLYPH') {
+    if (drawGlyphPuzzle(buf, state, clicks, keys)) { state.mode = 'EXPLORE'; input.clearBuffered(); }
   } else if (modeAtStart === 'ENCOUNTER' && state.mode === 'ENCOUNTER') {
     drawEncounterMenu(buf, state, clicks, keys);
   } else if (modeAtStart === 'CYPHERS' && state.mode === 'CYPHERS') {
