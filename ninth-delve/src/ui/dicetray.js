@@ -8,6 +8,7 @@ import { PALETTE } from '../engine/texgen.js';
 import { panel, text, button } from './widgets.js';
 import { resolveTask } from '../game/dice.js';
 import { effortCost, payCost, isImpaired } from '../game/player.js';
+import { sfx } from '../engine/audio.js';
 
 const BUF_W = 320, BUF_H = 200;
 const ROLL_MS = 650;
@@ -71,6 +72,7 @@ function doRoll(state) {
     base: t.spec.base, eases: t.spec.eases, effortLevels: t.effort,
     hinders: t.spec.hinders, rng: state.rng, impaired: isImpaired(p),
   });
+  sfx.dice();
   if (t.audit.auto) { t.phase = 'result'; buildResult(state); }
   else { t.phase = 'rolling'; t.rollT = 0; }
 }

@@ -3,7 +3,9 @@
 
 import { loadAssets, PALETTE } from './engine/texgen.js';
 import { makeRNG, resolveTask, specialOf } from './game/dice.js';
-import { createGameState, logEvent, awardXP } from './game/state.js';
+import { createGameState, logEvent, awardXP, requestWhisper } from './game/state.js';
+import { initAudio, setZoneDrone, sfx } from './engine/audio.js';
+import { WHISPERS } from './data/whispers.js';
 import { spawnExploreEntities } from './game/entities.js';
 import { connectivityTest, moveWithCollision, updateDoors, interact, startClimb, zoneAt, tileDist, hasLOS, cellAt } from './game/world.js';
 import { effortCost, applyDamage } from './game/player.js';
@@ -50,9 +52,18 @@ window.addEventListener('resize', resize);
 
 const rng = makeRNG(SEED);
 const state = createGameState(rng, SEED);
+state.mode = 'TITLE';
 state.entities = spawnExploreEntities(rng);
 const input = createInput(screen);
 let assets = null;
+
+function startDelve() {
+  initAudio();
+  state.mode = 'EXPLORE';
+  state.startTime = state.t;
+  requestWhisper(state, 'entry');
+  input.clearBuffered();
+}
 
 function openModal(m) {
   state.modal = m;
@@ -69,6 +80,7 @@ function exploreWorldEvents() {
   const p = state.player;
   const zx = Math.floor(p.x), zy = Math.floor(p.y);
   const z = zoneAt(zx, zy);
+  if (z && z !== state.droneZone) { state.droneZone = z; setZoneDrone(z); }
   if (z && !state.visitedZones.has(z)) {
     state.visitedZones.add(z);
     awardXP(state, 1, `zone:${z}`);
@@ -78,6 +90,8 @@ function exploreWorldEvents() {
   if (!state.glyph.muralSeen && tileDist(p.x, p.y, MURAL[0] + 0.5, MURAL[1] + 0.5) < 2.4 && hasLOS(state, p.x, p.y, MURAL[0] + 0.5, MURAL[1] + 0.5)) {
     state.glyph.muralSeen = true; logEvent(state, 'The nest mural shows a sequence of three glyphs.');
   }
+  // approaching the exit with the Key earns a last whisper
+  if (state.keyTaken && tileDist(p.x, p.y, 18.5, 1.5) < 3.5 && hasLOS(state, p.x, p.y, 18.5, 1.5)) requestWhisper(state, 'exit');
   // exit gate: needs the Key (Dungeon §6)
   if (cellAt(zx, zy) === CELL.EXIT) {
     if (state.keyTaken) { awardXP(state, 2, 'clear'); state.reportReason = 'exit'; state.exited = true; state.mode = 'REPORT'; }
@@ -154,6 +168,21 @@ function loop(now) {
   const clicks = []; for (let c; (c = input.takeClick());) clicks.push(c);
   const keys = []; for (let k; (k = input.takeKey());) keys.push(k);
 
+  // whisper pump (any mode): show one-time environmental text + cue
+  if (state.pendingWhisper) {
+    const key = state.pendingWhisper; state.pendingWhisper = null; state.shownWhispers.add(key);
+    state.whisper = { text: WHISPERS[key] || '', until: state.t + 5500 }; sfx.whisper();
+  }
+  // clear expired creature action-frames (lunge/hit juice)
+  for (const e of state.entities) if (e.frameUntil && state.t > e.frameUntil) { e.frame = null; e.frameUntil = 0; }
+  if (state.mode === 'REPORT' && !state.endTime) state.endTime = state.t;
+
+  if (modeAtStart === 'TITLE') {
+    drawTitle();
+    if (clicks.length || keys.includes('Enter') || keys.includes('KeyE') || keys.includes('Space')) startDelve();
+    finishFrame(now); return;
+  }
+
   if (modeAtStart === 'EXPLORE') {
     updateExplore(dt);
     if (keys.includes('KeyR')) practiceRoll();
@@ -187,16 +216,56 @@ function loop(now) {
     drawReport(buf, state, clicks, keys);
   }
 
-  // fps (top-right, clear of the encounter status panel)
+  finishFrame(now);
+}
+
+/** Whisper box + hit-flash + fps + shake-offset blit + frame accounting. */
+function finishFrame(now) {
+  // environmental whisper text box (top center), fading out
+  if (state.whisper && state.t < state.whisper.until) {
+    const remain = (state.whisper.until - state.t) / 5500;
+    buf.globalAlpha = Math.min(1, remain * 3);
+    buf.fillStyle = PALETTE.deepSteel; buf.fillRect(20, 6, BUF_W - 40, 22);
+    buf.strokeStyle = PALETTE.mauve; buf.lineWidth = 1; buf.strokeRect(20.5, 6.5, BUF_W - 41, 21);
+    buf.fillStyle = PALETTE.mauve; buf.font = '8px monospace'; buf.textAlign = 'center';
+    buf.fillText(state.whisper.text.slice(0, 62), BUF_W / 2, 15, BUF_W - 48);
+    if (state.whisper.text.length > 62) buf.fillText(state.whisper.text.slice(62), BUF_W / 2, 24, BUF_W - 48);
+    buf.globalAlpha = 1;
+  }
+  // hit flash
+  if (state.t < state.fx.flashUntil) {
+    buf.globalAlpha = 0.35 * ((state.fx.flashUntil - state.t) / 150);
+    buf.fillStyle = state.fx.flashColor; buf.fillRect(0, 0, BUF_W, BUF_H); buf.globalAlpha = 1;
+  }
   buf.fillStyle = PALETTE.cyan; buf.font = '8px monospace'; buf.textAlign = 'right';
   buf.fillText(`${fps} fps`, BUF_W - 4, 9);
 
+  // shake-offset blit
+  let sx = offX, sy = offY;
+  if (state.t < state.fx.shakeUntil) { const m = state.fx.mag * scale; sx += ((rng() * 2 - 1) * m) | 0; sy += ((rng() * 2 - 1) * m) | 0; }
   view.fillStyle = PALETTE.void; view.fillRect(0, 0, screen.width, screen.height);
-  view.drawImage(buffer, 0, 0, BUF_W, BUF_H, offX, offY, BUF_W * scale, BUF_H * scale);
+  view.drawImage(buffer, 0, 0, BUF_W, BUF_H, sx, sy, BUF_W * scale, BUF_H * scale);
 
   frames++;
   if (now - fpsClock >= 500) { fps = Math.round((frames * 1000) / (now - fpsClock)); frames = 0; fpsClock = now; }
   requestAnimationFrame(loop);
+}
+
+function drawTitle() {
+  buf.fillStyle = PALETTE.void; buf.fillRect(0, 0, BUF_W, BUF_H);
+  // faint gradient + a drifting glow
+  const g = buf.createLinearGradient(0, 0, 0, BUF_H);
+  g.addColorStop(0, PALETTE.deepSteel); g.addColorStop(1, PALETTE.void);
+  buf.fillStyle = g; buf.fillRect(0, 0, BUF_W, BUF_H);
+  if (assets.artifact_key) buf.drawImage(assets.artifact_key.frames[(state.t / 400 | 0) % 2], BUF_W / 2 - 16, 40, 32, 32);
+  buf.fillStyle = PALETTE.gold; buf.font = '18px monospace'; buf.textAlign = 'center';
+  buf.fillText('THE WHISPERLOCK', BUF_W / 2, 100);
+  buf.fillStyle = PALETTE.boneShadow; buf.font = '8px monospace';
+  buf.fillText('a ninth delve — Cypher System prototype', BUF_W / 2, 116);
+  buf.fillStyle = PALETTE.cyan;
+  if ((state.t / 600 | 0) % 2) buf.fillText('click, or press Enter, to delve', BUF_W / 2, 150);
+  buf.fillStyle = PALETTE.boneShadow; buf.font = '8px monospace';
+  buf.fillText('WASD move · mouse look · E interact · C cyphers · Tab sheet', BUF_W / 2, 180);
 }
 
 /** Dice-math tables (Rules §2, §4; CLAUDE.md acceptance for M3). */

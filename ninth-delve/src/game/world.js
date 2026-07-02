@@ -6,11 +6,12 @@ import {
   MAP, MAP_W, MAP_H, CELL, PLACEMENTS, ZONES, MURALS, DOORS,
 } from '../data/map_whisperlock.js';
 import { ODDITIES, ARTIFACT } from '../data/cyphers_oddities.js';
-import { awardXP, logEvent, overLimit } from './state.js';
+import { awardXP, logEvent, overLimit, requestWhisper } from './state.js';
 import { visiblePickups } from './entities.js';
 import { applyDamage } from './player.js';
 import { openTray } from '../ui/dicetray.js';
 import { tableIntrusion, scriptedIntrusion, queueScripted } from './intrusions.js';
+import { sfx } from '../engine/audio.js';
 
 const N4 = [[1, 0], [-1, 0], [0, 1], [0, -1]];
 const keyOf = (x, y) => y * MAP_W + x;
@@ -116,6 +117,7 @@ export function phaseFront(state) {
       for (const e of state.entities) if (e.group === placement.id) e.hidden = false;
       awardXP(state, 2, `secret:${placement.id}`);
       state.stats.secrets += 1;
+      requestWhisper(state, 'vault');
     }
   }
   return true;
@@ -144,8 +146,10 @@ export function updateDoors(state, dt) {
     const d = state.doors[k] || (state.doors[k] = { t: 0 });
     const near = Math.hypot(state.player.x - (x + 0.5), state.player.y - (y + 0.5)) < OPEN_DIST;
     const target = near ? 1 : 0;
+    const before = d.t;
     if (d.t < target) d.t = Math.min(1, d.t + DOOR_SPEED * dt);
     else if (d.t > target) d.t = Math.max(0, d.t - DOOR_SPEED * dt);
+    if (before < 0.5 && d.t >= 0.5) sfx.door(); // just slid open
   }
 }
 
@@ -217,6 +221,7 @@ export function interact(state) {
  * 3. The other route is the Gravity Nullifier (C3), which just sets `crossing`.
  */
 export function startClimb(state) {
+  requestWhisper(state, 'chasm');
   // the Z4 handhold intrusion fires once before the first climb
   if (!state.firedScripted?.has('Z4')) { scriptedIntrusion(state, 'Z4', () => climbRolls(state)); return; }
   climbRolls(state);
@@ -250,12 +255,14 @@ function collectPickup(state, e) {
   }
   if (e.ptype === 'cypher') {
     p.cyphers.push(e.cypher);
+    requestWhisper(state, 'cypher');
     const warn = overLimit(state) ? 'Over your cypher limit — the numenera grows restless.' : '';
     return { kind: 'pickup', title: 'unidentified cypher', text: e.cypher.unidName, sub: warn };
   }
   if (e.ptype === 'artifact') {
     state.keyTaken = true;
     awardXP(state, ARTIFACT.xp, 'artifact');
+    requestWhisper(state, 'key');
     queueScripted(state, 'Z5'); // the Key sparks (fires after this modal closes)
     return { kind: 'pickup', title: ARTIFACT.name, text: ARTIFACT.text };
   }

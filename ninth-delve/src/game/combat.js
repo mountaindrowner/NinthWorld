@@ -5,12 +5,17 @@
 
 import { CREATURES, armorVs } from '../data/creatures.js';
 import { KAVE } from '../data/pregen_kave.js';
-import { logEvent, overLimit } from './state.js';
+import { logEvent, overLimit, requestWhisper, shake, flash } from './state.js';
 import { applyDamage, payCost, abilityCost, recover, isDead } from './player.js';
 import { tileDist, hasLOS } from './world.js';
 import { drainRandomCypher, useCypher, examineSpec, applyExamine } from './cyphers.js';
 import { tableIntrusion } from './intrusions.js';
 import { openTray } from '../ui/dicetray.js';
+import { sfx } from '../engine/audio.js';
+import { PALETTE } from '../engine/texgen.js';
+
+/** Briefly pose a creature billboard on an action frame (M7 lunge/hit juice). */
+function pose(state, ent, idx, ms = 220) { ent.frame = idx; ent.frameUntil = state.t + ms; }
 
 const BANDS = ['immediate', 'short', 'long'];
 const bandFromTiles = (d) => (d <= 2 ? 'immediate' : d <= 10 ? 'short' : 'long');
@@ -51,6 +56,7 @@ export function startEncounter(state, creatureEntities) {
   state.mode = 'ENCOUNTER';
   p.defending = false;
   logEvent(state, `Encounter — ${enemies.map((e) => e.name).join(', ')}.`);
+  if (enemies.some((e) => e.id === 'abykos')) requestWhisper(state, 'boss');
 
   const maxLevel = Math.max(...enemies.map((e) => e.level));
   openTray(state, { label: 'initiative (Speed)', base: maxLevel, eases: [], hinders: [], stat: 'speed' }, (a) => {
@@ -71,6 +77,7 @@ function beginRound(state) {
   const boss = e.enemies.find((en) => en.alive && en.id === 'abykos');
   if (boss && state.player.cyphers.length) {
     logEvent(state, 'The Abykos telegraphs: it drinks what you carry.');
+    sfx.drain();
     drainRandomCypher(state, boss.surge ? 2 : 1);
     boss.surge = false;
   }
@@ -129,9 +136,10 @@ function consume(state) { state.encounter.acted = true; runPhase(state); }
 function doAttack(state) {
   const p = state.player, enemy = nearestEnemy(state);
   if (!enemy) return;
-  let weapon = KAVE.weapons.broadsword;
-  if (enemy.band === 'short') weapon = KAVE.weapons.dagger; // thrown
-  else if (enemy.band !== 'immediate') { logEvent(state, `${enemy.name} is too far — close first.`); return; }
+  if (enemy.band === 'long') { logEvent(state, `${enemy.name} is too far — close first (Fleet of Foot).`); return; }
+  // Immediate move folds into the swing (Rules §3.2); broadsword reaches Short by
+  // stepping in — a no-cypher melee win against the repositioning boss stays possible.
+  const weapon = KAVE.weapons.broadsword;
 
   const eases = [];
   if (weapon.ease) eases.push({ label: 'light', steps: weapon.ease });
@@ -158,6 +166,7 @@ function resolveAttack(state, enemy, weapon, a) {
   const armor = armorVs(enemy.def, 'physical');
   dmg = Math.max(0, dmg - armor);
   enemy.hp -= dmg;
+  sfx.hit(); shake(state, 1, 80); pose(state, enemy.ent, enemy.def.special.includes('phase') ? 4 : 3); // hit frame
   logEvent(state, `You hit the ${enemy.name} for ${dmg}${armor ? ` (−${armor} Armor)` : ''}.`);
   if (enemy.hp <= 0) killEnemy(state, enemy);
 }
@@ -165,6 +174,7 @@ function resolveAttack(state, enemy, weapon, a) {
 function killEnemy(state, enemy) {
   enemy.alive = false; enemy.ent.alive = false; state.stats.kills += 1;
   logEvent(state, `The ${enemy.name} falls.`);
+  if (state.stats.kills === 1) requestWhisper(state, 'kill');
   if (enemy.ent.stolen) { // recover a snatched cypher from its body
     state.entities.push({ uid: Date.now() + enemy.ent.uid, kind: 'pickup', ptype: 'cypher', sprite: 'pickup_cypher', x: enemy.ent.x, y: enemy.ent.y, cypher: enemy.ent.stolen });
     enemy.ent.stolen = null;
@@ -216,6 +226,7 @@ function enemyAttack(state, enemy) {
   if (enemy.id === 'laak' && livingLaaks(state) >= 2) hinders.push({ label: 'skitter', steps: 1 });
   if (p.nextDefenseHinder) { hinders.push({ label: 'phased behind', steps: 1 }); p.nextDefenseHinder = false; }
 
+  pose(state, enemy.ent, 2, 400); // lunge toward the player
   openTray(state, { label: `defend vs ${enemy.name} (${stat})`, base: enemy.level, eases, hinders, stat }, (a) => {
     resolveDefense(state, enemy, a);
     if (enemy.def.special.includes('reposition') && enemy.alive) enemy.band = 'short'; // Abykos phases away
@@ -235,6 +246,7 @@ function resolveDefense(state, enemy, a) {
   const armor = ignoresArmor ? 0 : Math.max(0, p.armor - p.armorPenalty);
   const dmg = Math.max(0, enemy.damage - armor);
   applyDamage(p, dmg);
+  sfx.hurt(); shake(state, 2, 130); flash(state, PALETTE.blood, 150);
   logEvent(state, `The ${enemy.name} hits you for ${dmg}${ignoresArmor ? ' (through Armor)' : ''}.`);
   if (intrusionTriggered(state, a)) creatureIntrusion(state, enemy);
 }
@@ -308,7 +320,7 @@ export function availableActions(state) {
   const e = state.encounter;
   if (!e || e.phase !== 'player') return [];
   const near = nearestEnemy(state);
-  const canAttack = near && (near.band === 'immediate' || near.band === 'short');
+  const canAttack = near && near.band !== 'long';
   const p = state.player;
   return [
     { id: 'attack', label: canAttack ? 'Attack' : 'Attack (far)', disabled: !canAttack },

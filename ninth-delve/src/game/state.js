@@ -62,8 +62,22 @@ export function createGameState(rng, seed) {
     exited: false,
     log: [],                      // recent event strings (HUD ticker)
     stats: { discoveries: 0, kills: 0, secrets: 0, cyphersUsed: 0, cyphersHoarded: 0, rerolls: 0 },
+    whisper: null,                // {text, until} environmental text box
+    shownWhispers: new Set(),
+    pendingWhisper: null,
+    fx: { shakeUntil: 0, mag: 0, flashUntil: 0, flashColor: '' },
+    startTime: 0,                 // stamped at first EXPLORE (for the Delve Report)
   };
 }
+
+/** Request a one-time whisper (Dungeon §9); main shows it + plays the cue. */
+export function requestWhisper(state, key) {
+  if (!state.shownWhispers.has(key)) state.pendingWhisper = key;
+}
+
+/** Screen-shake / hit-flash juice (M7). */
+export function shake(state, mag, ms) { state.fx.shakeUntil = state.t + ms; state.fx.mag = mag; }
+export function flash(state, color, ms) { state.fx.flashUntil = state.t + ms; state.fx.flashColor = color; }
 
 /** Push a short event line (kept to the last 6 for the HUD ticker). */
 export function logEvent(state, msg) {

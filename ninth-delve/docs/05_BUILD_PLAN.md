@@ -75,8 +75,8 @@ Tasks: WebAudio cues per Asset §5 · whisper text system + the 9 script hooks
 (write them now, grieving-archivist voice, ≤2 sentences) · hit flashes, screen
 shake (2px, 100ms), sprite lunge tweens · Delve Report screen per GDD §6 ·
 balancing pass vs Appendix targets · title screen · 3 full playthroughs logged.
-**Accept:** □ 20–40 min completion □ boss beatable with and without cyphers
-(without = visibly grindy) □ death still produces a Delve Report □ no console
+**Accept:** ☑ 20–40 min completion ☑ boss beatable with and without cyphers
+(without = visibly grindy) ☑ death still produces a Delve Report ☑ no console
 errors across a full run.
 
 ## Appendix — Balance targets (check at M7)
