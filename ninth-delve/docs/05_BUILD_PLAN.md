@@ -16,8 +16,8 @@ keys resolve (fallback or file) ☑ connectivity test passes and is committed.
 Tasks: DDA wall raycast + fishbowl fix + side shading + distance fog · WASD +
 pointer-lock yaw + Q/E fallback · circle-slide collision · floor/ceiling gradient
 fills · door cells render closed (no logic yet) · FPS counter.
-**Accept:** □ walk the full Whisperlock at ≥ 55 fps mid-laptop □ no wall clipping
-at corners □ textures per-zone correct vs placement table.
+**Accept:** ☑ walk the full Whisperlock at ≥ 55 fps mid-laptop ☑ no wall clipping
+at corners ☑ textures per-zone correct vs placement table.
 
 ## M2 — World interaction (1 session)
 Tasks: billboard sprite pass with z-buffer clip · pickups (shins/cyphers/oddities)

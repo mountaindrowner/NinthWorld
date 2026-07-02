@@ -1,14 +1,20 @@
-// Boot, game loop, and the state machine spine (Tech §5). M0 renders a test
-// pattern through the real 320×200 → integer-upscale pipeline and wires the
-// ?test=1 harness (connectivity + asset resolution). Systems arrive per milestone.
+// Boot, game loop, and the state machine spine (Tech §5). M1 renders the
+// first-person raycaster view and drives explore-mode movement. The ?test=1
+// harness (connectivity + asset resolution) still runs before the loop.
 
 import { loadAssets, PALETTE } from './engine/texgen.js';
-import { connectivityTest } from './game/world.js';
+import { connectivityTest, moveWithCollision } from './game/world.js';
+import { render as renderView } from './engine/raycaster.js';
+import { createInput } from './engine/input.js';
+import { PLACEMENTS, FACING } from './data/map_whisperlock.js';
 
 const BUF_W = 320, BUF_H = 200;
 
-/** BOOT → TITLE → EXPLORE ⇄ ENCOUNTER … (Tech §5). M0 stops at TITLE. */
-const STATE = { BOOT: 'BOOT', TITLE: 'TITLE' };
+/** BOOT → TITLE → EXPLORE ⇄ ENCOUNTER … (Tech §5). M1 boots into EXPLORE. */
+const STATE = { BOOT: 'BOOT', EXPLORE: 'EXPLORE' };
+
+// Explore movement (Tech §4): 4 fwd / 3 strafe cells·s⁻¹, ~2.5 rad·s⁻¹ turn.
+const MOVE_FWD = 4, MOVE_STRAFE = 3, TURN_RATE = 2.5, MOUSE_SENS = 0.0022;
 
 const params = new URLSearchParams(location.search);
 const TEST = params.has('test');
@@ -22,6 +28,7 @@ view.imageSmoothingEnabled = false;
 const buffer = document.createElement('canvas');
 buffer.width = BUF_W; buffer.height = BUF_H;
 const buf = buffer.getContext('2d');
+buf.imageSmoothingEnabled = false;
 
 let scale = 1, offX = 0, offY = 0;
 function resize() {
@@ -34,57 +41,43 @@ function resize() {
 }
 window.addEventListener('resize', resize);
 
-const game = { state: STATE.BOOT, seed: SEED, assets: null, t: 0, fps: 0 };
+const spawn = PLACEMENTS.find((pl) => pl.id === 'P');
+const game = {
+  state: STATE.BOOT,
+  seed: SEED,
+  assets: null,
+  fps: 0,
+  player: { x: spawn.x + 0.5, y: spawn.y + 0.5, angle: FACING[spawn.facing] },
+};
+const input = createInput(screen);
 
-/** M0 acceptance: a test pattern at 320×200, upscaled — proves the pipeline. */
-function drawTestPattern(t) {
-  // distance-fog gradient toward the void (the raycaster's mood, previewed)
-  const grad = buf.createLinearGradient(0, 0, 0, BUF_H);
-  grad.addColorStop(0, PALETTE.deepSteel);
-  grad.addColorStop(0.5, PALETTE.steel);
-  grad.addColorStop(1, PALETTE.void);
-  buf.fillStyle = grad;
-  buf.fillRect(0, 0, BUF_W, BUF_H);
+function update(dt) {
+  const p = game.player;
+  // turning: Q/E or arrows, plus consumed pointer-lock yaw
+  const turn = ((input.turnR ? 1 : 0) - (input.turnL ? 1 : 0)) * TURN_RATE * dt;
+  p.angle += turn + input.consumeYaw() * MOUSE_SENS;
 
-  // 16-color palette swatch grid (proves the locked palette is wired)
-  const cols = Object.values(PALETTE);
-  const sw = 16, sh = 16, cols8 = 8;
-  cols.forEach((hex, i) => {
-    const x = 16 + (i % cols8) * (sw + 2);
-    const y = 132 + ((i / cols8) | 0) * (sh + 2);
-    buf.fillStyle = hex; buf.fillRect(x, y, sw, sh);
-    buf.strokeStyle = PALETTE.void; buf.strokeRect(x + 0.5, y + 0.5, sw, sh);
-  });
+  // movement relative to facing (right vector = (−dirY, dirX))
+  const dirX = Math.cos(p.angle), dirY = Math.sin(p.angle);
+  const mvF = (input.forward ? 1 : 0) - (input.back ? 1 : 0);
+  const mvS = (input.strafeR ? 1 : 0) - (input.strafeL ? 1 : 0);
+  const dx = dirX * mvF * MOVE_FWD * dt + (-dirY) * mvS * MOVE_STRAFE * dt;
+  const dy = dirY * mvF * MOVE_FWD * dt + (dirX) * mvS * MOVE_STRAFE * dt;
+  if (dx || dy) moveWithCollision(p, dx, dy);
+}
 
-  // a pulsing numenera glow accent (gold + cyan, accents only)
-  const pulse = 0.5 + 0.5 * Math.sin(t / 400);
-  buf.fillStyle = PALETTE.gold;
-  buf.globalAlpha = 0.4 + 0.4 * pulse;
-  buf.beginPath(); buf.arc(BUF_W / 2, 60, 10 + pulse * 4, 0, Math.PI * 2); buf.fill();
-  buf.globalAlpha = 1;
-
-  // a few resolved-asset thumbnails (proves the fallback registry works)
-  if (game.assets) {
-    const keys = ['wall_synth', 'door_glyph', 'laak', 'artifact_key', 'd20_strip'];
-    keys.forEach((k, i) => {
-      const a = game.assets[k];
-      if (!a) return;
-      const fr = a.frames[((t / 200) | 0) % a.frames.length];
-      buf.drawImage(fr, 224 + (i % 3) * 32, 24 + ((i / 3) | 0) * 34, 28, 28);
-    });
-  }
-
-  // title + FPS
-  buf.fillStyle = PALETTE.boneLight;
-  buf.font = '16px monospace'; buf.textAlign = 'center';
-  buf.fillText('NINTH DELVE', BUF_W / 2, 30);
-  buf.font = '8px monospace';
-  buf.fillStyle = PALETTE.boneShadow;
-  buf.fillText('M0 — scaffold & fallback art', BUF_W / 2, 44);
-  buf.textAlign = 'left';
+function drawHud() {
   buf.fillStyle = PALETTE.cyan;
-  buf.fillText(`${game.fps} fps`, 6, 12);
-  buf.fillText(`seed ${game.seed}`, 6, 22);
+  buf.font = '8px monospace'; buf.textAlign = 'left';
+  buf.fillText(`${game.fps} fps`, 4, 10);
+  if (!input.locked) {
+    buf.fillStyle = PALETTE.boneShadow; buf.textAlign = 'center';
+    buf.fillText('click to look · WASD move · Q/E turn', BUF_W / 2, BUF_H - 8);
+  }
+  // crosshair
+  buf.fillStyle = PALETTE.boneLight;
+  buf.fillRect(BUF_W / 2 - 3, BUF_H / 2, 6, 1);
+  buf.fillRect(BUF_W / 2, BUF_H / 2 - 3, 1, 6);
 }
 
 function blit() {
@@ -93,15 +86,18 @@ function blit() {
   view.drawImage(buffer, 0, 0, BUF_W, BUF_H, offX, offY, BUF_W * scale, BUF_H * scale);
 }
 
-let last = performance.now(), frames = 0, fpsClock = last;
+let fpsClock = 0, frames = 0, prev = 0;
 function loop(now) {
-  game.t = now;
-  drawTestPattern(now);
+  const dt = prev ? Math.min(0.05, (now - prev) / 1000) : 0; // clamp long frames
+  prev = now;
+
+  if (game.state === STATE.EXPLORE) update(dt);
+  renderView(buf, game.player, game.assets);
+  drawHud();
   blit();
 
   frames++;
   if (now - fpsClock >= 500) { game.fps = Math.round((frames * 1000) / (now - fpsClock)); frames = 0; fpsClock = now; }
-  last = now;
   requestAnimationFrame(loop);
 }
 
@@ -121,14 +117,14 @@ function runTests() {
   console.log(`assets: ${assetsPass ? 'PASS ✓' : 'FAIL ✗'} — ${files} file / ${fb} fallback, ${unresolved.length} unresolved`);
 
   const pass = conn.pass && assetsPass;
-  console.log(`%cM0 acceptance: ${pass ? 'PASS ✓' : 'FAIL ✗'}`, `color:${pass ? '#4FE3C1' : '#7A1F2B'};font-weight:bold`);
+  console.log(`%ctest suite: ${pass ? 'PASS ✓' : 'FAIL ✗'}`, `color:${pass ? '#4FE3C1' : '#7A1F2B'};font-weight:bold`);
   window.__NINTH_TEST = { pass, connectivity: conn, assetsPass };
 }
 
 async function boot() {
   resize();
   game.assets = await loadAssets();
-  game.state = STATE.TITLE;
+  game.state = STATE.EXPLORE;
   window.__NINTH = game;
   if (TEST) runTests();
   requestAnimationFrame(loop);

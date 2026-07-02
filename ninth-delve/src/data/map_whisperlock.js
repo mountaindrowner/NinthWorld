@@ -85,6 +85,9 @@ export const PLACEMENTS = [
 /** 6 coolant-chasm cells (crossed via C3, or 2 Might climb tasks). */
 export const CHASM = [[19, 6], [19, 7], [19, 8], [19, 9], [19, 10], [19, 11]];
 
+/** Wall cells textured as the Z2 clue mural (glyph order), beside nest #3. */
+export const MURALS = [[4, 15]];
+
 /**
  * Door / key gating for the connectivity graph.
  * - Standard doors always open (M2 adds slide anim).

@@ -3,7 +3,7 @@
 // helpers and the door/key connectivity proof required by the build plan.
 
 import {
-  MAP, MAP_W, MAP_H, CELL, PLACEMENTS,
+  MAP, MAP_W, MAP_H, CELL, PLACEMENTS, ZONES, MURALS,
 } from '../data/map_whisperlock.js';
 
 const N4 = [[1, 0], [-1, 0], [0, 1], [0, -1]];
@@ -13,6 +13,57 @@ const keyOf = (x, y) => y * MAP_W + x;
 export function cellAt(x, y) {
   if (x < 0 || y < 0 || x >= MAP_W || y >= MAP_H) return CELL.WALL;
   return MAP[y][x];
+}
+
+// --- M1 rendering + movement helpers ----------------------------------------
+
+// Cells the raycaster draws as a full-height wall slice. Doors/lock render as
+// closed door panels; pillars and secret/phase walls are opaque.
+const RENDER_SOLID = new Set([CELL.WALL, ' ', CELL.PILLAR, CELL.SECRET, CELL.DOOR, CELL.LOCK]);
+/** @returns {boolean} does a ray stop at this cell? */
+export function isRenderSolid(x, y) { return RENDER_SOLID.has(cellAt(x, y)); }
+
+// Cells that block movement. In M1 doors (open-logic is M2) and the chasm
+// (crossing is M6) are passable so the whole layout is walkable for the perf
+// and texture pass; only true walls, pillars, and secret/phase walls block.
+const BLOCKING = new Set([CELL.WALL, ' ', CELL.PILLAR, CELL.SECRET]);
+export function isBlocking(x, y) { return BLOCKING.has(cellAt(x, y)); }
+
+/** @returns {string|null} zone id for a cell (first matching rect). */
+export function zoneAt(x, y) {
+  for (const z of ZONES) if (x >= z.x1 && x <= z.x2 && y >= z.y1 && y <= z.y2) return z.id;
+  return null;
+}
+
+const MURAL_SET = new Set(MURALS.map(([x, y]) => keyOf(x, y)));
+/** Asset key for a wall cell (Asset §2 per-zone mapping). */
+export function wallTextureKey(x, y) {
+  const c = cellAt(x, y);
+  if (c === CELL.PILLAR) return 'pillar_glyph';
+  if (c === CELL.DOOR) return 'door_slide';
+  if (c === CELL.LOCK) return 'door_glyph';
+  if (c === CELL.SECRET) return 'wall_scuffed';
+  if (MURAL_SET.has(keyOf(x, y))) return 'wall_mural';
+  const z = zoneAt(x, y);
+  if (z === 'Z2') return 'wall_warren';
+  if (z === 'Z4' || z === 'Z5') return 'wall_conduit';
+  return 'wall_synth';
+}
+
+/**
+ * Move a {x,y} entity by (dx,dy) with circle-slide collision (r=0.3). Axes are
+ * resolved independently so we slide along walls instead of clipping corners.
+ */
+export function moveWithCollision(p, dx, dy) {
+  const r = 0.3;
+  const blocked = (fx, fy) => {
+    for (const [ox, oy] of [[-r, -r], [r, -r], [-r, r], [r, r]]) {
+      if (isBlocking(Math.floor(fx + ox), Math.floor(fy + oy))) return true;
+    }
+    return false;
+  };
+  if (!blocked(p.x + dx, p.y)) p.x += dx;
+  if (!blocked(p.x, p.y + dy)) p.y += dy;
 }
 
 // Cells a walker can stand on for the connectivity graph. Doors always open;
