@@ -9,8 +9,8 @@ Tasks: repo layout per Tech doc §2 · `index.html` + canvas + boot loop ·
 fallback registry · transcribe map ASCII → `map_whisperlock.js` grid + placement
 table → constants · connectivity flood-fill test (P reaches X through door/key
 graph) — fix corridors if it fails, never move placements.
-**Accept:** □ page loads, renders test pattern at 320×200 upscaled □ all asset
-keys resolve (fallback or file) □ connectivity test passes and is committed.
+**Accept:** ☑ page loads, renders test pattern at 320×200 upscaled ☑ all asset
+keys resolve (fallback or file) ☑ connectivity test passes and is committed.
 
 ## M1 — Walking sim (1 session)
 Tasks: DDA wall raycast + fishbowl fix + side shading + distance fog · WASD +
