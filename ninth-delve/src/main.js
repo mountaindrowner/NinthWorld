@@ -7,11 +7,13 @@ import { createGameState, logEvent } from './game/state.js';
 import { spawnExploreEntities } from './game/entities.js';
 import { connectivityTest, moveWithCollision, updateDoors, interact } from './game/world.js';
 import { effortCost, applyDamage } from './game/player.js';
+import { maybeTrigger } from './game/combat.js';
 import { render as renderView } from './engine/raycaster.js';
 import { createInput } from './engine/input.js';
 import { drawHud } from './ui/hud.js';
-import { drawModal, drawSheet } from './ui/menus.js';
+import { drawModal, drawSheet, drawEncounterMenu } from './ui/menus.js';
 import { openTray, updateTray, drawTray } from './ui/dicetray.js';
+import { drawReport } from './ui/report.js';
 import { KAVE } from './data/pregen_kave.js';
 
 const BUF_W = 320, BUF_H = 200;
@@ -73,6 +75,8 @@ function updateExplore(dt) {
     const ev = interact(state);
     if (ev) openModal(ev);
   }
+
+  maybeTrigger(state); // LOS + aggro → freeze into ENCOUNTER
 }
 
 /** M3 demo: a full skill+asset+Effort attack roll to exercise the tray (R). */
@@ -128,11 +132,15 @@ function loop(now) {
     drawTray(buf, state, clicks, keys, assets);
   } else if (modeAtStart === 'SHEET' && state.mode === 'SHEET') {
     if (drawSheet(buf, state, clicks, keys, assets)) { state.mode = 'EXPLORE'; input.clearBuffered(); }
+  } else if (modeAtStart === 'ENCOUNTER' && state.mode === 'ENCOUNTER') {
+    drawEncounterMenu(buf, state, clicks, keys);
+  } else if (state.mode === 'REPORT') {
+    drawReport(buf, state, clicks, keys);
   }
 
-  // fps
-  buf.fillStyle = PALETTE.cyan; buf.font = '8px monospace'; buf.textAlign = 'left';
-  buf.fillText(`${fps} fps`, 4, 10);
+  // fps (top-right, clear of the encounter status panel)
+  buf.fillStyle = PALETTE.cyan; buf.font = '8px monospace'; buf.textAlign = 'right';
+  buf.fillText(`${fps} fps`, BUF_W - 4, 9);
 
   view.fillStyle = PALETTE.void; view.fillRect(0, 0, screen.width, screen.height);
   view.drawImage(buffer, 0, 0, BUF_W, BUF_H, offX, offY, BUF_W * scale, BUF_H * scale);

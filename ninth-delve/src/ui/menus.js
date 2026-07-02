@@ -5,8 +5,31 @@
 import { PALETTE } from '../engine/texgen.js';
 import { panel, text, wrapText, button, bar } from './widgets.js';
 import { KAVE } from '../data/pregen_kave.js';
+import { availableActions, playerAction } from '../game/combat.js';
 
 const BUF_W = 320, BUF_H = 200;
+
+/** Encounter status + action menu (drawn while mode==='ENCOUNTER'). */
+export function drawEncounterMenu(ctx, state, clicks, keys) {
+  const e = state.encounter;
+  if (!e) return;
+  panel(ctx, 4, 4, 172, 12 + e.enemies.length * 10, `round ${e.round}`);
+  let y = 24;
+  for (const en of e.enemies) {
+    const col = en.alive ? PALETTE.boneLight : PALETTE.boneShadow;
+    const tag = `${en.name}  ${Math.max(0, en.hp)}/${en.maxHp} [${en.band.slice(0, 3)}]${en.stunned ? ' stun' : ''}${en.alive ? '' : ' †'}`;
+    text(ctx, tag, 10, y, { size: 8, color: col });
+    y += 10;
+  }
+  if (e.phase !== 'player') { text(ctx, '… enemy phase', 10, y + 2, { size: 8, color: PALETTE.rust }); return; }
+
+  const acts = availableActions(state);
+  let bx = 4, by = 150; const bw = 100, bh = 14; let col = 0;
+  acts.forEach((act, i) => {
+    if (button(ctx, { x: bx, y: by, w: bw, h: bh, label: act.label, hotkey: `Digit${i + 1}`, disabled: act.disabled }, clicks, keys)) playerAction(state, act.id);
+    if (++col === 3) { col = 0; bx = 4; by += bh + 2; } else bx += bw + 4;
+  });
+}
 
 /** Character sheet (Tab). Returns true when dismissed. */
 export function drawSheet(ctx, state, clicks, keys, assets) {

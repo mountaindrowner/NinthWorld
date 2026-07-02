@@ -130,6 +130,27 @@ export function facingLabel(angle) {
   return 'N';
 }
 
+/** Distance in tiles between two points. */
+export const tileDist = (x1, y1, x2, y2) => Math.hypot(x1 - x2, y1 - y2);
+
+/**
+ * Line-of-sight between two points: march the segment; blocked by any wall or
+ * closed door/lock (Tech §4). Chasm and open doors don't block sight.
+ */
+export function hasLOS(state, x1, y1, x2, y2) {
+  const dx = x2 - x1, dy = y2 - y1;
+  const steps = Math.ceil(Math.hypot(dx, dy) / 0.1);
+  for (let i = 1; i < steps; i++) {
+    const x = x1 + (dx * i) / steps, y = y1 + (dy * i) / steps;
+    const c = cellAt(Math.floor(x), Math.floor(y));
+    if (c === CELL.WALL || c === ' ' || c === CELL.PILLAR) return false;
+    if (c === CELL.SECRET && !state.secretsFound.has(keyOf(Math.floor(x), Math.floor(y)))) return false;
+    if (c === CELL.DOOR && doorSlide(state, Math.floor(x), Math.floor(y)) < 0.5) return false;
+    if (c === CELL.LOCK && !state.glyph.solved) return false;
+  }
+  return true;
+}
+
 /** Cell directly in front of the player (for interact). */
 function frontCell(p) {
   const fx = p.x + Math.cos(p.angle) * 0.9;

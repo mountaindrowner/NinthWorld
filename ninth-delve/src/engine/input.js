@@ -33,7 +33,8 @@ export function createInput(canvas) {
   window.addEventListener('keydown', (e) => {
     if (e.repeat) return;
     if (HELD[e.code]) { state[HELD[e.code]] = true; e.preventDefault(); return; }
-    if (e.code === 'KeyE' || e.code === 'Enter' || e.code === 'Space') { state._interact = true; state._keys.push(e.code); e.preventDefault(); return; }
+    if (e.code === 'KeyE') { state._interact = true; state._keys.push(e.code); e.preventDefault(); return; }
+    if (e.code === 'Enter' || e.code === 'Space') { state._keys.push(e.code); e.preventDefault(); return; }
     if (e.code === 'Escape') { state._keys.push('Escape'); return; }
     if (/^Digit[1-9]$/.test(e.code)) { state._keys.push(e.code); e.preventDefault(); return; }
     if (e.code === 'KeyR' || e.code === 'KeyC') { state._keys.push(e.code); return; }

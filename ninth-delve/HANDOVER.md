@@ -184,11 +184,51 @@ Playtest notes:
   +1 Effort (cost 2, Might 14→12), ROLL → nat 9 vs target 6 = SUCCESS →
   "hit for 6"; Continue → EXPLORE. Sheet opens on Tab. 60 fps, no errors.
 
-Next: M4 — Encounter engine vs laak. `combat.js`: encounter trigger (LOS + aggro
-range from explore), freeze to ENCOUNTER, initiative Speed roll vs maxLevel×3,
-range-band snap + Move, action menu (Attack / Fleet of Foot / Aggression toggle /
-Catch Breath / Defend / Flee), enemy phase = player Speed-defense rolls (shield
-asset, Defend/Aggression chips), damage+Armor both ways via `applyDamage`,
-special-roll choices routed to effects, death/victory → EXPLORE, nat 1 → stub
-intrusion ("the GM smiles"). Reuse the tray for every roll. Add a combat smoke
-test to `?test=1` (seeded laak fight resolves start-to-finish).
+Next: M4 — Encounter engine vs laak. [done below]
+
+## 2026-07-02 — M4 complete
+Done:
+- `game/combat.js`: full turn engine. `maybeTrigger` (LOS + aggro from explore,
+  pulls the group), `startEncounter` (freeze, snap range bands, initiative Speed
+  roll vs maxLevel), round loop with player-first/enemy-first ordering, action
+  menu (`playerAction`): Attack (broadsword immediate / thrown dagger at Short),
+  Fleet of Foot (close a band), Aggression (stance toggle, 2 Might −Edge, eases
+  attacks + hinders defenses), Catch Breath (recovery as action, consumes rest
+  slot), Defend (eases next enemy phase), Flee (Speed roll → EXPLORE + re-aggro
+  cooldown). Enemy phase = player Speed/Might defense rolls (shield asset, Defend
+  ease, Aggression/skitter hinders). Damage both ways via `applyDamage`; special
+  17/18 = +dmg, 19/20 = minor/major choice (dmg/knockback/stun); nat 1 = "the GM
+  smiles" stub (real intrusions M6). Victory → EXPLORE, defeat → REPORT.
+- `game/world.js`: `tileDist`, `hasLOS` (segment march, blocked by wall/closed
+  door/lock).
+- `ui/menus.js`: `drawEncounterMenu` (round + enemy hp/band/stun list + action
+  buttons). `ui/report.js`: Delve Report (functional stub; M7 expands).
+- `main.js`: ENCOUNTER + REPORT modes; `maybeTrigger` polled in explore; fps
+  moved top-right (was colliding with the encounter panel).
+
+Deviations/Doc issues:
+- **Input bug fixed:** Enter/Space had doubled as world-interact (only E should).
+  Symptom: finishing a combat tray with Enter auto-grabbed the pickup underfoot.
+  Now only `E` interacts; Enter/Space are UI-confirm only.
+- Enemy movement is coarse: an out-of-band enemy closes one band per enemy turn
+  (no per-tile pathing in combat — bands are the spatial model, Rules §3.2).
+- Special-roll "favor" on a successful defense currently just stuns the attacker;
+  richer defense specials can come with the M5 roster nuances.
+
+Playtest notes:
+- `?seed=7`, headless full fight: teleport onto #6 laak → encounter triggers →
+  initiative tray → player attack tray (nat 9 vs target) → laak falls → victory →
+  EXPLORE, kills 1, player Hale, no accidental pickup, no errors. Every roll went
+  through the tray. `?seed=3`: Aggression toggles for 1 Might (14→13) and adds the
+  "Aggression" ease chip to the attack (same flag hinders defenses). 60 fps.
+
+Next: M5 — Full roster & boss. `entities.js`/`combat.js`: murden (static hinder
+aura in Short, snatch-and-flee intrusion, drops stolen cypher on death), broken
+hound (den phasing in explore ignoring S walls, phase-behind intrusion,
+**phase-lunge ignores Armor** — Appendix REQUIRED, already stubbed in
+resolveDefense), Abykos (physical resist 3 / energy 0, per-round Drain of a
+random carried cypher level, Might-defense touch, repositioning, telegraph).
+`game/cyphers.js`: USE effects C1–C6 + Examine (hindered Intellect reveals
+identity). Multi-enemy encounters. Over-limit rule (intrusion on nat 1–2).
+Add roster/boss checks to `?test=1` (hound hits through Armor; boss drains a
+hoarded cypher by round 3 in a no-use run; all six cyphers function).

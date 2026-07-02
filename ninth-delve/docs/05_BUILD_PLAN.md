@@ -44,9 +44,9 @@ Aggression toggle / Catch Breath / Defend / Flee · enemy phase = player defense
 rolls with shield/stance chips · damage/Armor application both ways · special
 rolls 17/18/19/20 with choice modal · death/victory → EXPLORE · nat 1 → stub
 intrusion ("the GM smiles" placeholder).
-**Accept:** □ full laak fight start-to-finish, every number visible in tray
-□ Aggression eases attacks AND hinders defenses simultaneously □ Catch Breath
-consumes daily rest slot 1 □ Flee works and re-aggro works.
+**Accept:** ☑ full laak fight start-to-finish, every number visible in tray
+☑ Aggression eases attacks AND hinders defenses simultaneously ☑ Catch Breath
+consumes daily rest slot 1 ☑ Flee works and re-aggro works.
 
 ## M5 — Full roster & boss (1.5 sessions)
 Tasks: murden (static hinder aura, snatch-and-flee intrusion, nest AI, drops
