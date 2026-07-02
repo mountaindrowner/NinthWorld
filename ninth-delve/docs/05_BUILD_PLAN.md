@@ -33,9 +33,9 @@ target, natural, outcome, special) · seedable RNG · `player.js` pools/Edge/Eff
 costs (3/5/7 −Edge; Speed armor surcharge +1/level) · damage track states ·
 recovery rolls with daily sequence · dice-tray UI: chips, animated d20, result
 banner, Effort spend buttons with live cost preview · character sheet (Tab).
-**Accept:** □ unit table: Effort 1/2 on Might = 2/4 cost for Kave (Edge 1); on
-Speed = 3/6 with armor **[math per Rules §2]** □ tray shows every chip on a
-skill+asset+Effort roll □ pool at 0 drops damage track and overflows correctly.
+**Accept:** ☑ unit table: Effort 1/2 on Might = 2/4 cost for Kave (Edge 1); on
+Speed = 3/6 with armor **[math per Rules §2]** ☑ tray shows every chip on a
+skill+asset+Effort roll ☑ pool at 0 drops damage track and overflows correctly.
 
 ## M4 — Encounter engine vs laak (1–1.5 sessions)
 Tasks: encounter trigger (LOS + range) · state freeze + backdrop sway · initiative

@@ -3,9 +3,34 @@
 // combat/dicetray. Each draw fn returns true when the modal is dismissed.
 
 import { PALETTE } from '../engine/texgen.js';
-import { panel, text, wrapText, button } from './widgets.js';
+import { panel, text, wrapText, button, bar } from './widgets.js';
+import { KAVE } from '../data/pregen_kave.js';
 
 const BUF_W = 320, BUF_H = 200;
+
+/** Character sheet (Tab). Returns true when dismissed. */
+export function drawSheet(ctx, state, clicks, keys, assets) {
+  const p = state.player;
+  const w = 260, h = 150, x = (BUF_W - w) / 2, y = 20;
+  panel(ctx, x, y, w, h, KAVE.name);
+  text(ctx, KAVE.archetype, x + 8, y + 22, { size: 8, color: PALETTE.boneShadow });
+
+  const stats = [['Might', 'might'], ['Speed', 'speed'], ['Intellect', 'intellect']];
+  let sy = y + 36;
+  for (const [lbl, k] of stats) {
+    text(ctx, lbl, x + 8, sy + 7, { size: 8, color: PALETTE.boneLight });
+    bar(ctx, x + 70, sy, 80, 8, p.pools[k] / p.poolMax[k], PALETTE.cyan);
+    text(ctx, `${p.pools[k]}/${p.poolMax[k]}  Edge ${p.edge[k]}`, x + 156, sy + 7, { size: 8, color: PALETTE.boneShadow });
+    sy += 14;
+  }
+  text(ctx, `Tier ${p.tier} · Effort ${p.effort} · Armor ${p.armor - p.armorPenalty} · ${p.track}`, x + 8, sy + 8, { size: 8, color: PALETTE.gold });
+  text(ctx, `Broadsword ${KAVE.weapons.broadsword.damage + p.weaponBonus} · Dagger ${KAVE.weapons.dagger.damage} (eases) · fists 2`, x + 8, sy + 22, { size: 8, color: PALETTE.boneLight });
+  text(ctx, `Aggression (2 Might) · Fleet of Foot (1 Speed)`, x + 8, sy + 34, { size: 8, color: PALETTE.boneLight });
+  text(ctx, `XP ${p.xp} (spent ${p.xpSpent}) · cyphers ${p.cyphers.length}/${p.cypherLimit} · ${p.shins} shins`, x + 8, sy + 46, { size: 8, color: PALETTE.goldGlow });
+
+  if (button(ctx, { x: x + w - 74, y: y + h - 22, w: 64, h: 16, label: 'Close', hotkey: 'Enter' }, clicks, keys)) return true;
+  return keys.includes('Tab') || keys.includes('Escape');
+}
 
 /**
  * Render the current modal (state.modal). Returns true when the player dismisses

@@ -36,6 +36,7 @@ export function createInput(canvas) {
     if (e.code === 'KeyE' || e.code === 'Enter' || e.code === 'Space') { state._interact = true; state._keys.push(e.code); e.preventDefault(); return; }
     if (e.code === 'Escape') { state._keys.push('Escape'); return; }
     if (/^Digit[1-9]$/.test(e.code)) { state._keys.push(e.code); e.preventDefault(); return; }
+    if (e.code === 'KeyR' || e.code === 'KeyC') { state._keys.push(e.code); return; }
     if (e.code === 'Tab') { state._keys.push('Tab'); e.preventDefault(); }
   });
   window.addEventListener('keyup', (e) => { if (HELD[e.code]) { state[HELD[e.code]] = false; e.preventDefault(); } });

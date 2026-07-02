@@ -153,3 +153,42 @@ d20 (d20_strip), result banner, Effort spend buttons with live cost preview,
 character sheet (Tab). Wire a standalone "practice roll" in EXPLORE to exercise
 the tray before M4 combat. Add dice-math unit tables to `?test=1` (Effort 1/2 on
 Might = 2/4 for Edge 1; on Speed = 3/6 with armor; pool-0 overflow + track drop).
+
+## 2026-07-02 — M3 complete
+Done:
+- `game/player.js`: `effortCost` (3/5/7, −Edge once, +surcharge/level for Speed,
+  +1/level Impaired), `abilityCost`, `payCost` (empties→track drop), `applyDamage`
+  (Might→Speed→Intellect overflow, per-pool track drop, overflow=dead),
+  `restorePool`/`applyRecovery`/`recover` (0→+ raises track).
+- `ui/dicetray.js`: full roll state machine (choose→rolling→result) on `state.tray`.
+  Renders base + every ease/hinder chip, live target, Effort ± with cost preview
+  and pool-after, animated d20 (d20_strip), SUCCESS/FAILURE banner, special-roll
+  line, 19/20 minor/major choice buttons, and a Reroll (1 XP, take-better, same
+  chips) button. `onResolve(audit)` hands the result back to the caller.
+- `ui/menus.js`: added `drawSheet` (Tab character sheet).
+- `main.js`: ROLL and SHEET modes; R = practice skill+asset+Effort strike to
+  exercise the tray; dice-math unit tables added to `?test=1`.
+
+Deviations/Doc issues:
+- `resolveTask` treats natural 19/20 as an automatic success (book text: 17–20
+  special range), so a minor/major effect always lands on 19/20 regardless of
+  target. Flagging as an interpretation; matches the special-roll table intent.
+- Reroll (Rules §6 / build-plan M6) is already hosted on the tray now since the
+  tray is where it lives; the XP ledger + intrusion economy that feed it arrive
+  in M6. Rerolling replays the same chips (no re-charged Effort).
+
+Playtest notes:
+- `?seed=7`, headless: `?test=1` dice math PASS — Effort1/2 Might = 2/4, Speed
+  +armor = 3/6, Impaired = 3/6, target math, special rolls, pool-0 overflow +
+  Hale→Impaired. Practice roll: opened tray (diff 5, skill −1, asset −1),
+  +1 Effort (cost 2, Might 14→12), ROLL → nat 9 vs target 6 = SUCCESS →
+  "hit for 6"; Continue → EXPLORE. Sheet opens on Tab. 60 fps, no errors.
+
+Next: M4 — Encounter engine vs laak. `combat.js`: encounter trigger (LOS + aggro
+range from explore), freeze to ENCOUNTER, initiative Speed roll vs maxLevel×3,
+range-band snap + Move, action menu (Attack / Fleet of Foot / Aggression toggle /
+Catch Breath / Defend / Flee), enemy phase = player Speed-defense rolls (shield
+asset, Defend/Aggression chips), damage+Armor both ways via `applyDamage`,
+special-roll choices routed to effects, death/victory → EXPLORE, nat 1 → stub
+intrusion ("the GM smiles"). Reuse the tray for every roll. Add a combat smoke
+test to `?test=1` (seeded laak fight resolves start-to-finish).
