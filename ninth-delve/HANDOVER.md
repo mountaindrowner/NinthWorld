@@ -573,3 +573,28 @@ Verified headless (SwiftShader WebGL): loads clean, no errors; screenshots
 captured of lit room, look-up shaft, flat mode, plus the same vantage in the
 current engine for the side-by-side. Camera collision via Babylon ellipsoid.
 Status: SAMPLE ONLY — no game code touched; migration decision stays Mark's.
+
+## 2026-07-03 — Babylon lab v2: GAMEPLAY (the real combat engine in the new renderer)
+Mark asked for combat/swinging/collision in the Babylon sample. Delivered the
+strongest possible proof: `lab/babylon-room.html` now imports and runs the
+ACTUAL game modules — `createGameState`, `spawnExploreEntities`, `updateCombat`,
+`playerSwing`, `tryRest`, `toggleAggression`, `interact`, the real dice and
+creatures. Babylon renders; the shipping simulation simulates. Zero game code
+was modified. The Babylon camera writes player x/y/angle into the real
+GameState each frame (map↔world mapping), and creature entities drive
+SpriteManager billboards (directional cellIndex + invertU mirroring the
+raycaster's pickFrame logic, hit-tint, corpses persist).
+In the lab you can: swing (click; hold = heavy = real Effort from Might),
+take pickups (E), rest (R), toggle Aggression (F) — and the laak, hound
+(chasing with its attached cyan light), and stone-throwing murden all behave
+exactly as in the game because it IS the game. Damage popups project
+world→screen as DOM elements; feed/stats/hurt-flash are DOM overlays; hurt
+shake is a camera roll. 3D sword viewmodel (blade/guard/grip meshes parented
+to the camera) with idle sway, charge pull-back, and an arc that cuts through
+space; scaled to viewmodel proportions after two iterations.
+Verified headless (SwiftShader): walk-in → hound aggro → chase → real defense
+rolls ("you evade the broken hound") → swings → "you strike the broken hound
+— 6" → kill, corpse remains; zero errors. Canvas got tabindex for focus.
+Meaning for the migration estimate: the renderer swap is REAL — the whole
+simulation ran unmodified under Babylon on the first try. Migration cost is
+confirmed to be renderer+UI plumbing only.

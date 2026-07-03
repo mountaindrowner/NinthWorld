@@ -3,44 +3,58 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Ninth Delve — Babylon Room Sample</title>
+  <title>Ninth Delve — Babylon Gameplay Sample</title>
   <style>
-    * { margin: 0; padding: 0; }
+    * { margin: 0; padding: 0; box-sizing: border-box; }
     html, body { width: 100%; height: 100%; background: #0A0A12; overflow: hidden; }
     #c { width: 100%; height: 100%; display: block; image-rendering: pixelated; outline: none; }
-    #hud {
-      position: fixed; left: 12px; top: 10px; color: #D9CBB3; font: 13px monospace;
-      text-shadow: 1px 1px 0 #0A0A12; pointer-events: none; line-height: 1.6;
-    }
+    .mono { font-family: monospace; text-shadow: 1px 1px 0 #0A0A12; }
+    #hud { position: fixed; left: 12px; top: 10px; color: #D9CBB3; font: 13px monospace; pointer-events: none; line-height: 1.55; }
     #hud b { color: #F2D06B; }
     #mode { color: #4FE3C1; }
+    #feed { position: fixed; left: 12px; top: 92px; font: 13px monospace; pointer-events: none; line-height: 1.5; }
+    #stats { position: fixed; left: 12px; bottom: 12px; color: #D9CBB3; font: 14px monospace; pointer-events: none; line-height: 1.6; }
+    #flash { position: fixed; inset: 0; background: #7A1F2B; opacity: 0; pointer-events: none; transition: opacity 60ms; }
+    #dead { position: fixed; inset: 0; display: none; align-items: center; justify-content: center;
+            color: #D9CBB3; font: 22px monospace; background: rgba(10,10,18,0.75); }
+    .pop { position: fixed; font: bold 14px monospace; pointer-events: none; text-shadow: 1px 1px 0 #0A0A12; }
   </style>
 </head>
 <body>
-  <canvas id="c"></canvas>
-  <div id="hud">
-    <b>BABYLON SAMPLE — the Collapsed Entry (Z1), same map, same art</b><br>
-    click to look · WASD walk · mouse looks UP and DOWN now · <b>T</b> = toggle lighting (compare!) · <b>P</b> = pixel size<br>
-    <span id="mode">mode: LIT — torchlight, conduit glow, light shaft, fog</span>
+  <canvas id="c" tabindex="0"></canvas>
+  <div id="hud" class="mono">
+    <b>BABYLON GAMEPLAY SAMPLE — real combat code, new renderer</b><br>
+    click to look · WASD walk · <b>click = swing</b>, hold = heavy · E take · F stance · R rest · <b>T</b> light A/B · <b>P</b> pixel size<br>
+    <span id="mode">mode: LIT</span>
   </div>
+  <div id="feed" class="mono"></div>
+  <div id="stats" class="mono"></div>
+  <div id="flash"></div>
+  <div id="dead" class="mono">the dark keeps you — reload to delve again</div>
   <script src="../vendor/babylon.js"></script>
   <script type="module">
+    // ——— the REAL game modules: same dice, same creatures, same combat ———
     import { loadAssets, PALETTE } from '../src/engine/texgen.js';
     import { MAP, CELL } from '../src/data/map_whisperlock.js';
-    import { wallTextureKey } from '../src/game/world.js';
+    import { wallTextureKey, interact, tileDist } from '../src/game/world.js';
+    import { makeRNG } from '../src/game/dice.js';
+    import { createGameState } from '../src/game/state.js';
+    import { spawnExploreEntities } from '../src/game/entities.js';
+    import { updateCombat, playerSwing, tryRest, toggleAggression } from '../src/game/combat.js';
+    import { CREATURES } from '../src/data/creatures.js';
+    import { isDead } from '../src/game/player.js';
+    import { initAudio } from '../src/engine/audio.js';
 
-    const C = 1.5;                 // 1 map cell = 1.5 m
-    const WALL_H = 2.6;            // corridor ceiling height (m)
-    const TALL_H = 5.2;            // collapsed-room ceiling (raycaster can't do this)
-    const REGION = { x0: 0, y0: 17, x1: 11, y1: 23 };   // Z1: spawn corridor + first room
-    const TALL = (x, y) => x >= 4 && x <= 10 && y >= 19 && y <= 21; // the tall chamber
-    const HOLE = (x, y) => (x === 6 || x === 7) && y === 20;        // collapsed ceiling
-    const CRACK = (x, y) => x === 8 && y === 21;                    // glowing floor crack
-    const wx = (mx) => mx * C, wz = (my) => -my * C;                // map → world
+    const C = 1.5, WALL_H = 2.6, TALL_H = 5.2;
+    const REGION = { x0: 0, y0: 17, x1: 11, y1: 23 };
+    const TALL = (x, y) => x >= 4 && x <= 10 && y >= 19 && y <= 21;
+    const HOLE = (x, y) => (x === 6 || x === 7) && y === 20;
+    const CRACK = (x, y) => x === 8 && y === 21;
+    const wx = (mx) => mx * C, wz = (my) => -my * C;
 
     const canvas = document.getElementById('c');
     const engine = new BABYLON.Engine(canvas, false, { antialias: false });
-    let pixel = 2; engine.setHardwareScalingLevel(pixel); // PS1-flavored chunk
+    let pixel = 2; engine.setHardwareScalingLevel(pixel);
     const scene = new BABYLON.Scene(engine);
     scene.clearColor = BABYLON.Color4.FromHexString(PALETTE.void + 'FF');
     scene.ambientColor = new BABYLON.Color3(1, 1, 1);
@@ -51,215 +65,258 @@
 
     const assets = await loadAssets();
 
-    // --- materials from the game's own procedural textures -------------------
-    const matCache = {};
-    function matFor(key, { emissive = null, uv = 1 } = {}) {
-      const id = key + (emissive || '') + uv;
-      if (matCache[id]) return matCache[id];
-      const src = assets[key].frames[0];
-      const dt = new BABYLON.DynamicTexture('t_' + id, { width: src.width, height: src.height }, scene, false);
-      dt.getContext().drawImage(src, 0, 0);
-      dt.update(false);
-      dt.updateSamplingMode(BABYLON.Texture.NEAREST_SAMPLINGMODE);
-      dt.uScale = uv; dt.vScale = uv;
-      const m = new BABYLON.StandardMaterial('m_' + id, scene);
-      m.diffuseTexture = dt;
-      m.specularColor = BABYLON.Color3.Black();
-      m.ambientColor = new BABYLON.Color3(0.10, 0.10, 0.12); // faint base visibility
-      if (emissive) m.emissiveColor = BABYLON.Color3.FromHexString(emissive);
-      matCache[id] = m;
-      return m;
+    // ——— the REAL game state: entities from the placement table ———
+    const rng = makeRNG(7);
+    const state = createGameState(rng, 7);
+    state.mode = 'EXPLORE';
+    state.entities = spawnExploreEntities(rng);
+    // stage the first room: keep the tutorial laak + loot; bring one hound and
+    // the murden scout to the chamber; hide everything beyond the region
+    for (const e of state.entities) {
+      const inRegion = e.x >= REGION.x0 && e.x <= REGION.x1 + 1 && e.y >= REGION.y0 && e.y <= REGION.y1 + 1;
+      if (!inRegion) e.hidden = true;
     }
+    const hound = state.entities.find((e) => e.creatureId === 'hound');
+    hound.hidden = false; hound.x = 6.5; hound.y = 20.5; hound.home = { x: 6.5, y: 20.5 };
+    const murden = state.entities.find((e) => e.creatureId === 'murden' && e.group === '2');
+    murden.hidden = false; murden.x = 8.5; murden.y = 19.5; murden.home = { x: 8.5, y: 19.5 };
 
-    // --- build the room from the real map grid -------------------------------
+    // ——— geometry from the real map (same as the look-only sample) ———
+    const matCache = {};
+    function matFor(key) {
+      if (matCache[key]) return matCache[key];
+      const src = assets[key].frames[0];
+      const dt = new BABYLON.DynamicTexture('t_' + key, { width: src.width, height: src.height }, scene, false);
+      dt.getContext().drawImage(src, 0, 0); dt.update(false);
+      dt.updateSamplingMode(BABYLON.Texture.NEAREST_SAMPLINGMODE);
+      const m = new BABYLON.StandardMaterial('m_' + key, scene);
+      m.diffuseTexture = dt; m.specularColor = BABYLON.Color3.Black();
+      m.ambientColor = new BABYLON.Color3(0.10, 0.10, 0.12);
+      matCache[key] = m; return m;
+    }
     const isWallChar = (ch) => ch === CELL.WALL || ch === ' ' || ch === CELL.SECRET || ch === CELL.DOOR;
-    const cellAt = (x, y) => (MAP[y] && MAP[y][x]) || '#';
-    const floors = [];
+    const cellCh = (x, y) => (MAP[y] && MAP[y][x]) || '#';
     for (let y = REGION.y0; y <= REGION.y1; y++) {
       for (let x = REGION.x0; x <= REGION.x1; x++) {
-        const ch = cellAt(x, y);
+        const ch = cellCh(x, y);
         if (isWallChar(ch)) {
-          // wall column, textured with the game's own per-zone texture
           const h = (TALL(x, y - 1) || TALL(x, y + 1) || TALL(x - 1, y) || TALL(x + 1, y)) ? TALL_H : WALL_H;
           const key = ch === CELL.DOOR ? 'door_slide' : ch === CELL.SECRET ? 'wall_scuffed' : wallTextureKey(x, y);
           const box = BABYLON.MeshBuilder.CreateBox('w', { width: C, depth: C, height: h }, scene);
           box.position.set(wx(x) + C / 2, h / 2, wz(y) - C / 2);
-          box.material = matFor(key);
-          box.checkCollisions = true;
+          box.material = matFor(key); box.checkCollisions = true;
           continue;
         }
-        floors.push([x, y]);
-        // floor tile — TEXTURED (the raycaster only ever had a gradient)
         if (!CRACK(x, y)) {
           const f = BABYLON.MeshBuilder.CreateGround('f', { width: C, height: C }, scene);
           f.position.set(wx(x) + C / 2, 0, wz(y) - C / 2);
-          f.material = matFor('wall_synth');
-          f.checkCollisions = true;
+          f.material = matFor('wall_synth'); f.checkCollisions = true;
         } else {
-          // the crack: a pit with cyan machine-glow rising out of it
-          const pitGlow = BABYLON.MeshBuilder.CreateGround('pg', { width: C * 0.9, height: C * 0.9 }, scene);
-          pitGlow.position.set(wx(x) + C / 2, -2.2, wz(y) - C / 2);
+          const pg = BABYLON.MeshBuilder.CreateGround('pg', { width: C * 0.9, height: C * 0.9 }, scene);
+          pg.position.set(wx(x) + C / 2, -2.2, wz(y) - C / 2);
           const gm = new BABYLON.StandardMaterial('gm', scene);
-          gm.emissiveColor = BABYLON.Color3.FromHexString(PALETTE.cyanDeep);
-          gm.disableLighting = true;
-          pitGlow.material = gm;
-          for (const [ox, oz, rw, rd] of [[0, -C * 0.45, C, C * 0.1], [0, C * 0.45, C, C * 0.1], [-C * 0.45, 0, C * 0.1, C], [C * 0.45, 0, C * 0.1, C]]) {
-            const lip = BABYLON.MeshBuilder.CreateGround('lip', { width: rw, height: rd }, scene);
-            lip.position.set(wx(x) + C / 2 + ox, 0.001, wz(y) - C / 2 + oz);
-            lip.material = matFor('wall_synth');
-          }
+          gm.emissiveColor = BABYLON.Color3.FromHexString(PALETTE.cyanDeep); gm.disableLighting = true;
+          pg.material = gm;
         }
-        // ceiling tile — also textured; skipped under the collapse hole
         const h = TALL(x, y) ? TALL_H : WALL_H;
         if (!HOLE(x, y)) {
           const cl = BABYLON.MeshBuilder.CreateGround('cl', { width: C, height: C }, scene);
           cl.position.set(wx(x) + C / 2, h, wz(y) - C / 2);
-          cl.rotation.x = Math.PI; // face down
+          cl.rotation.x = Math.PI;
           cl.material = matFor('wall_conduit');
         }
       }
     }
 
-    // --- camera: real first-person — you can finally look up and down --------
+    // ——— camera (drives the real player position) ———
     const cam = new BABYLON.UniversalCamera('cam', new BABYLON.Vector3(wx(2.5), 1.5, wz(22.5)), scene);
     cam.setTarget(new BABYLON.Vector3(wx(2.5), 1.4, wz(20)));
     cam.attachControl(canvas, true);
     cam.keysUp = [87]; cam.keysDown = [83]; cam.keysLeft = [65]; cam.keysRight = [68];
-    cam.speed = 0.14; cam.angularSensibility = 2600; cam.inertia = 0.6;
-    cam.minZ = 0.05;
+    cam.speed = 0.14; cam.angularSensibility = 2600; cam.inertia = 0.6; cam.minZ = 0.05;
     cam.checkCollisions = true;
     cam.ellipsoid = new BABYLON.Vector3(0.35, 0.75, 0.35);
-    canvas.addEventListener('click', () => canvas.requestPointerLock?.());
+    canvas.addEventListener('click', () => { initAudio(); canvas.requestPointerLock?.(); });
 
-    // --- LIGHT: everything the raycaster cannot do ---------------------------
+    // ——— lights (same set as the look sample) ———
     const ambient = new BABYLON.HemisphericLight('amb', new BABYLON.Vector3(0, 1, 0), scene);
     ambient.intensity = 0.06; ambient.groundColor = BABYLON.Color3.FromHexString(PALETTE.deepSteel);
-
-    // 1) a guttering brazier at the corridor mouth — warm, alive, flickering
     const torchPos = new BABYLON.Vector3(wx(2.5), 1.7, wz(19.4));
     const torch = new BABYLON.PointLight('torch', torchPos, scene);
-    torch.diffuse = BABYLON.Color3.FromHexString(PALETTE.goldGlow);
-    torch.range = 9;
+    torch.diffuse = BABYLON.Color3.FromHexString(PALETTE.goldGlow); torch.range = 9;
     const brazier = BABYLON.MeshBuilder.CreateBox('bz', { width: 0.3, height: 0.5, depth: 0.3 }, scene);
     brazier.position.set(torchPos.x, 0.25, torchPos.z);
     const bzm = new BABYLON.StandardMaterial('bzm', scene);
-    bzm.emissiveColor = BABYLON.Color3.FromHexString(PALETTE.gold);
-    brazier.material = bzm;
-
-    // 2) a live conduit strip — cyan light BLEEDING ONTO THE FLOOR, slow pulse
+    bzm.emissiveColor = BABYLON.Color3.FromHexString(PALETTE.gold); brazier.material = bzm;
     const strip = BABYLON.MeshBuilder.CreateBox('strip', { width: 0.08, height: 2.0, depth: 0.08 }, scene);
     strip.position.set(wx(10) - 0.06, 1.3, wz(20) - C / 2);
-    const sm = new BABYLON.StandardMaterial('sm', scene);
-    sm.emissiveColor = BABYLON.Color3.FromHexString(PALETTE.cyan);
-    sm.disableLighting = true;
+    const sm = new BABYLON.StandardMaterial('smm', scene);
+    sm.emissiveColor = BABYLON.Color3.FromHexString(PALETTE.cyan); sm.disableLighting = true;
     strip.material = sm;
     const conduit = new BABYLON.PointLight('conduit', strip.position.clone(), scene);
-    conduit.diffuse = BABYLON.Color3.FromHexString(PALETTE.cyan);
-    conduit.range = 7;
-
-    // 3) the collapse: a shaft of pale light falling through the broken ceiling
-    const shaft = new BABYLON.SpotLight('shaft',
-      new BABYLON.Vector3(wx(7), TALL_H + 0.4, wz(20) - C / 2),
+    conduit.diffuse = BABYLON.Color3.FromHexString(PALETTE.cyan); conduit.range = 7;
+    const shaft = new BABYLON.SpotLight('shaft', new BABYLON.Vector3(wx(7), TALL_H + 0.4, wz(20) - C / 2),
       new BABYLON.Vector3(0, -1, 0), Math.PI / 4.5, 6, scene);
-    shaft.diffuse = BABYLON.Color3.FromHexString(PALETTE.boneLight);
-    shaft.intensity = 1.4;
-
-    // dust motes drifting down the shaft
+    shaft.diffuse = BABYLON.Color3.FromHexString(PALETTE.boneLight); shaft.intensity = 1.4;
     const dustCnv = document.createElement('canvas'); dustCnv.width = dustCnv.height = 8;
     const dctx = dustCnv.getContext('2d');
     dctx.fillStyle = '#D9CBB3'; dctx.beginPath(); dctx.arc(4, 4, 2, 0, Math.PI * 2); dctx.fill();
     const dust = new BABYLON.ParticleSystem('dust', 120, scene);
     dust.particleTexture = new BABYLON.Texture(dustCnv.toDataURL(), scene);
     dust.emitter = new BABYLON.Vector3(wx(7), TALL_H, wz(20) - C / 2);
-    dust.minEmitBox = new BABYLON.Vector3(-0.8, 0, -0.8);
-    dust.maxEmitBox = new BABYLON.Vector3(0.8, 0, 0.8);
-    dust.color1 = new BABYLON.Color4(0.85, 0.8, 0.7, 0.25);
-    dust.color2 = new BABYLON.Color4(0.85, 0.8, 0.7, 0.06);
-    dust.minSize = 0.015; dust.maxSize = 0.05;
-    dust.minLifeTime = 4; dust.maxLifeTime = 9;
-    dust.emitRate = 14;
-    dust.direction1 = new BABYLON.Vector3(-0.02, -0.25, -0.02);
-    dust.direction2 = new BABYLON.Vector3(0.02, -0.5, 0.02);
+    dust.minEmitBox = new BABYLON.Vector3(-0.8, 0, -0.8); dust.maxEmitBox = new BABYLON.Vector3(0.8, 0, 0.8);
+    dust.color1 = new BABYLON.Color4(0.85, 0.8, 0.7, 0.25); dust.color2 = new BABYLON.Color4(0.85, 0.8, 0.7, 0.06);
+    dust.minSize = 0.015; dust.maxSize = 0.05; dust.minLifeTime = 4; dust.maxLifeTime = 9; dust.emitRate = 14;
+    dust.direction1 = new BABYLON.Vector3(-0.02, -0.25, -0.02); dust.direction2 = new BABYLON.Vector3(0.02, -0.5, 0.02);
     dust.start();
-
-    // 4) gold motes curling out of the floor crack
-    const cyanRise = new BABYLON.ParticleSystem('rise', 60, scene);
-    cyanRise.particleTexture = new BABYLON.Texture(dustCnv.toDataURL(), scene);
-    cyanRise.emitter = new BABYLON.Vector3(wx(8) + C / 2, -0.4, wz(21) - C / 2);
-    cyanRise.color1 = new BABYLON.Color4(0.31, 0.89, 0.76, 0.5);
-    cyanRise.color2 = new BABYLON.Color4(0.12, 0.43, 0.39, 0.1);
-    cyanRise.minSize = 0.02; cyanRise.maxSize = 0.06;
-    cyanRise.minLifeTime = 2.5; cyanRise.maxLifeTime = 5;
-    cyanRise.emitRate = 10;
-    cyanRise.direction1 = new BABYLON.Vector3(-0.05, 0.3, -0.05);
-    cyanRise.direction2 = new BABYLON.Vector3(0.05, 0.6, 0.05);
-    cyanRise.start();
-
-    // --- the enemies: your billboard sprites, standing in real light ---------
-    function spriteStrip(key, frames) {
-      const a = assets[key];
-      const strip = document.createElement('canvas');
-      strip.width = a.w * frames.length; strip.height = a.h;
-      const c2 = strip.getContext('2d');
-      frames.forEach((f, i) => c2.drawImage(a.frames[f], i * a.w, 0));
-      return strip.toDataURL();
-    }
-    // murden (front idle frames), watching you from the tall room
-    const murMgr = new BABYLON.SpriteManager('mur', spriteStrip('murden', [6, 7]), 2,
-      { width: 64, height: 64 }, scene, 0.01, BABYLON.Texture.NEAREST_SAMPLINGMODE);
-    murMgr.fogEnabled = true;
-    const murden = new BABYLON.Sprite('m1', murMgr);
-    const MUR_H = 1.7;
-    murden.width = MUR_H; murden.height = MUR_H;
-    murden.position = new BABYLON.Vector3(wx(8) + C / 2, MUR_H / 2, wz(19) - C / 2);
-    murden.playAnimation(0, 1, true, 420);
-
-    // broken hound — ITS SEAMS CAST LIGHT NOW (a light attached to a creature)
-    const hndMgr = new BABYLON.SpriteManager('hnd', spriteStrip('hound', [0, 1]), 2,
-      { width: 64, height: 64 }, scene, 0.01, BABYLON.Texture.NEAREST_SAMPLINGMODE);
-    hndMgr.fogEnabled = true;
-    const hound = new BABYLON.Sprite('h1', hndMgr);
-    const HND_H = 1.35;
-    hound.width = HND_H; hound.height = HND_H;
-    hound.playAnimation(0, 1, true, 380);
     const houndGlow = new BABYLON.PointLight('hglow', BABYLON.Vector3.Zero(), scene);
     houndGlow.diffuse = BABYLON.Color3.FromHexString(PALETTE.cyan);
     houndGlow.range = 4; houndGlow.intensity = 0.55;
 
-    // the gold cypher, glowing where it lies
-    const pkMgr = new BABYLON.SpriteManager('pk', spriteStrip('pickup_cypher', [0, 1]), 2,
-      { width: 64, height: 64 }, scene, 0.01, BABYLON.Texture.NEAREST_SAMPLINGMODE);
-    pkMgr.fogEnabled = true;
-    const pickup = new BABYLON.Sprite('p1', pkMgr);
-    pickup.width = 0.55; pickup.height = 0.55;
-    pickup.position = new BABYLON.Vector3(wx(5) + C / 2, 0.35, wz(21) - C / 2);
-    pickup.playAnimation(0, 1, true, 300);
-    const pkGlow = new BABYLON.PointLight('pkglow', pickup.position.clone(), scene);
-    pkGlow.diffuse = BABYLON.Color3.FromHexString(PALETTE.goldGlow);
-    pkGlow.range = 3.2; pkGlow.intensity = 0.6;
+    // ——— creature/pickup billboards driven by the REAL entity list ———
+    const FRAME_N = { laak: 9, hound: 10, murden: 10, abykos: 9 };
+    const SIZE = { laak: 0.7, hound: 1.35, murden: 1.7, abykos: 2.6 };
+    const mgrCache = {};
+    function managerFor(key, frames) {
+      if (mgrCache[key]) return mgrCache[key];
+      const a = assets[key];
+      const stripC = document.createElement('canvas');
+      stripC.width = a.w * frames; stripC.height = a.h;
+      const c2 = stripC.getContext('2d');
+      for (let i = 0; i < frames; i++) c2.drawImage(a.frames[i], i * a.w, 0);
+      const mgr = new BABYLON.SpriteManager('mgr_' + key, stripC.toDataURL(), 12,
+        { width: a.w, height: a.h }, scene, 0.01, BABYLON.Texture.NEAREST_SAMPLINGMODE);
+      mgr.fogEnabled = true;
+      mgrCache[key] = mgr; return mgr;
+    }
+    const spriteByUid = new Map();
+    /** the raycaster's directional pickFrame, reproduced for Babylon cells */
+    function cellFor(e, p) {
+      const F = e.F || {}; const n = FRAME_N[e.creatureId] || 2;
+      if (!e.alive) return { i: e.frame ?? (F.deathB ?? F.dead ?? n - 1), flip: false };
+      if (e.frame != null) return { i: e.frame, flip: false };
+      const bob = Math.floor(state.t / 400) % 2;
+      const toView = Math.atan2(p.y - e.y, p.x - e.x);
+      let rel = (e.heading ?? toView) - toView;
+      while (rel > Math.PI) rel -= 2 * Math.PI;
+      while (rel < -Math.PI) rel += 2 * Math.PI;
+      const a = Math.abs(rel);
+      if (a < Math.PI / 4 && F.front) return { i: F.front[bob], flip: false };
+      if (a > 3 * Math.PI / 4 && F.back) return { i: F.back[bob], flip: false };
+      return { i: bob ? (F.idleB ?? 1) : (F.idleA ?? 0), flip: rel > 0 };
+    }
+    function syncEntities() {
+      const p = state.player;
+      for (const e of state.entities) {
+        let s = spriteByUid.get(e.uid);
+        if (e.hidden || e.taken) { if (s) s.isVisible = false; continue; }
+        if (!s) {
+          if (e.kind === 'creature') {
+            s = new BABYLON.Sprite('e' + e.uid, managerFor(e.sprite, FRAME_N[e.creatureId] || 2));
+          } else {
+            const n = assets[e.sprite].frames.length;
+            s = new BABYLON.Sprite('e' + e.uid, managerFor(e.sprite, n));
+          }
+          spriteByUid.set(e.uid, s);
+        }
+        s.isVisible = true;
+        if (e.kind === 'creature') {
+          const h = SIZE[e.creatureId] || 1.4;
+          s.width = h; s.height = h;
+          s.position = new BABYLON.Vector3(wx(e.x), e.alive ? h / 2 : h * 0.28, wz(e.y));
+          const { i, flip } = cellFor(e, p);
+          s.cellIndex = i; s.invertU = flip;
+          // hit tint: red flash while the hit pose plays
+          const hitPose = e.frameUntil && e.frame === (e.F?.hit ?? -1);
+          s.color = hitPose ? new BABYLON.Color4(1, 0.35, 0.35, 1) : new BABYLON.Color4(1, 1, 1, 1);
+          if (e.creatureId === 'hound' && e.alive) houndGlow.position.set(wx(e.x), 0.9, wz(e.y));
+        } else {
+          s.width = 0.55; s.height = 0.55;
+          s.position = new BABYLON.Vector3(wx(e.x), 0.32 + Math.sin(state.t / 500 + e.uid) * 0.05, wz(e.y));
+          s.cellIndex = Math.floor(state.t / 300) % (assets[e.sprite].frames.length);
+        }
+      }
+    }
 
-    // --- living light + hound patrol ------------------------------------------
-    let t = 0;
-    scene.onBeforeRenderObservable.add(() => {
-      t += engine.getDeltaTime();
-      // torch gutter: noise-ish flicker + tiny position sway
-      torch.intensity = lit ? 0.85 + 0.28 * Math.sin(t / 90) * Math.sin(t / 41 + 1.7) : 0;
-      torch.position.x = torchPos.x + Math.sin(t / 130) * 0.05;
-      // conduit slow pulse
-      conduit.intensity = lit ? 0.5 + 0.3 * (0.5 + 0.5 * Math.sin(t / 900)) : 0;
-      sm.emissiveColor = BABYLON.Color3.FromHexString(PALETTE.cyan).scale(0.6 + 0.4 * (0.5 + 0.5 * Math.sin(t / 900)));
-      // hound paces the corridor, glow riding along
-      const hz = wz(19.2) - (0.5 + 0.5 * Math.sin(t / 2600)) * 2.2 * C;
-      hound.position = new BABYLON.Vector3(wx(6.2), HND_H / 2, hz);
-      houndGlow.position.set(hound.position.x, 0.9, hound.position.z);
-      // murden bobs faintly, watching
-      murden.position.y = MUR_H / 2 + Math.sin(t / 700) * 0.02;
-      // pickup bob + glow breath
-      pickup.position.y = 0.35 + Math.sin(t / 500) * 0.05;
-      pkGlow.intensity = lit ? 0.5 + 0.2 * Math.sin(t / 500) : 0;
+    // ——— the sword: a real 3D blade parented to the camera ———
+    const swordPivot = new BABYLON.TransformNode('swp', scene);
+    swordPivot.parent = cam;
+    swordPivot.position = new BABYLON.Vector3(0.34, -0.38, 0.72);
+    swordPivot.scaling = new BABYLON.Vector3(0.45, 0.45, 0.45); // viewmodel proportion
+    const bladeMat = new BABYLON.StandardMaterial('blm', scene);
+    bladeMat.diffuseColor = BABYLON.Color3.FromHexString(PALETTE.boneLight);
+    bladeMat.emissiveColor = BABYLON.Color3.FromHexString(PALETTE.boneLight).scale(0.25);
+    bladeMat.specularColor = new BABYLON.Color3(0.4, 0.4, 0.45);
+    const blade = BABYLON.MeshBuilder.CreateBox('blade', { width: 0.045, height: 0.62, depth: 0.014 }, scene);
+    blade.parent = swordPivot; blade.position.y = 0.4; blade.material = bladeMat;
+    const guardMat = new BABYLON.StandardMaterial('gdm', scene);
+    guardMat.emissiveColor = BABYLON.Color3.FromHexString(PALETTE.gold).scale(0.7);
+    const guard = BABYLON.MeshBuilder.CreateBox('guard', { width: 0.2, height: 0.035, depth: 0.045 }, scene);
+    guard.parent = swordPivot; guard.position.y = 0.07; guard.material = guardMat;
+    const gripMat = new BABYLON.StandardMaterial('grm', scene);
+    gripMat.diffuseColor = BABYLON.Color3.FromHexString(PALETTE.rustDeep);
+    const grip = BABYLON.MeshBuilder.CreateBox('grip', { width: 0.05, height: 0.2, depth: 0.05 }, scene);
+    grip.parent = swordPivot; grip.position.y = -0.05; grip.material = gripMat;
+
+    // swing input — same contract as the game: tap = light, hold ≥350ms = heavy
+    let chargeStart = 0;
+    canvas.addEventListener('mousedown', (e) => { if (document.pointerLockElement === canvas && e.button === 0) chargeStart = performance.now(); });
+    canvas.addEventListener('mouseup', (e) => {
+      if (document.pointerLockElement === canvas && e.button === 0 && chargeStart) {
+        playerSwing(state, performance.now() - chargeStart >= 350);
+      }
+      chargeStart = 0;
+    });
+    window.addEventListener('keydown', (e) => {
+      if (e.code === 'Space') playerSwing(state, false);
+      if (e.code === 'KeyF') toggleAggression(state);
+      if (e.code === 'KeyR') tryRest(state);
+      if (e.code === 'KeyE') { const ev = interact(state); if (ev) state.rollFeed?.push({ txt: `${ev.title}: ${ev.text}`, color: PALETTE.goldGlow, t0: state.t }); }
+      if (e.code === 'KeyT') setLit(!lit);
+      if (e.code === 'KeyP') { pixel = pixel >= 3 ? 1 : pixel + 1; engine.setHardwareScalingLevel(pixel); }
     });
 
-    // --- T: the comparison switch — LIT vs FLAT (raycaster-style shading) ----
+    // ——— DOM overlays: feed, stats, popups, hurt flash ———
+    const feedEl = document.getElementById('feed');
+    const statsEl = document.getElementById('stats');
+    const flashEl = document.getElementById('flash');
+    const popEls = new Map();
+    function syncOverlays() {
+      const p = state.player;
+      feedEl.innerHTML = (state.rollFeed || []).map((l) => {
+        const age = (state.t - l.t0) / 4500;
+        if (age > 1) return '';
+        return `<div style="color:${l.color || '#D9CBB3'};opacity:${Math.max(0, 1 - age)}">${l.txt}</div>`;
+      }).join('');
+      statsEl.innerHTML =
+        `<span style="color:#7A1F2B">Might ${p.pools.might}/${p.poolMax.might}</span> · ` +
+        `<span style="color:#4FE3C1">Speed ${p.pools.speed}/${p.poolMax.speed}</span> · ` +
+        `<span style="color:#C9A227">Int ${p.pools.intellect}/${p.poolMax.intellect}</span> · ` +
+        `${p.track.toUpperCase()}${p.aggression ? ' · <span style="color:#F2D06B">AGGRESSION</span>' : ''}` +
+        ` · cyphers ${p.cyphers.length} · ${p.shins} shins`;
+      flashEl.style.opacity = state.t < state.fx.flashUntil ? 0.28 : 0;
+      // world-anchored damage popups, projected to the screen
+      state.popups = (state.popups || []).filter((pop) => state.t - pop.t0 < 900);
+      const seen = new Set();
+      for (const pop of state.popups) {
+        const id = pop.t0 + pop.txt;
+        seen.add(id);
+        let el = popEls.get(id);
+        if (!el) { el = document.createElement('div'); el.className = 'pop'; el.textContent = pop.txt; document.body.appendChild(el); popEls.set(id, el); }
+        const age = (state.t - pop.t0) / 900;
+        const proj = BABYLON.Vector3.Project(new BABYLON.Vector3(wx(pop.x), 1.1 + age * 0.7, wz(pop.y)),
+          BABYLON.Matrix.Identity(), scene.getTransformMatrix(),
+          cam.viewport.toGlobal(engine.getRenderWidth(), engine.getRenderHeight()));
+        el.style.left = `${(proj.x / engine.getRenderWidth()) * window.innerWidth}px`;
+        el.style.top = `${(proj.y / engine.getRenderHeight()) * window.innerHeight}px`;
+        el.style.color = pop.color || '#F2D06B';
+        el.style.opacity = String(Math.max(0, 1 - age * 0.8));
+        el.style.display = proj.z < 1 ? 'block' : 'none';
+      }
+      for (const [id, el] of popEls) if (!seen.has(id)) { el.remove(); popEls.delete(id); }
+    }
+
+    // ——— the loop: Babylon renders, the REAL game simulates ———
     let lit = true;
     const modeEl = document.getElementById('mode');
     function setLit(on) {
@@ -267,18 +324,61 @@
       ambient.intensity = on ? 0.06 : 0.85;
       shaft.intensity = on ? 1.4 : 0;
       dust.emitRate = on ? 14 : 0;
-      modeEl.textContent = on
-        ? 'mode: LIT — torchlight, conduit glow, light shaft, fog'
-        : 'mode: FLAT — roughly what the raycaster does (uniform light + fog only)';
+      houndGlow.intensity = on ? 0.55 : 0;
+      modeEl.textContent = on ? 'mode: LIT' : 'mode: FLAT (raycaster-style)';
     }
-    window.addEventListener('keydown', (e) => {
-      if (e.code === 'KeyT') setLit(!lit);
-      if (e.code === 'KeyP') { pixel = pixel >= 3 ? 1 : pixel + 1; engine.setHardwareScalingLevel(pixel); }
+    let last = performance.now();
+    scene.onBeforeRenderObservable.add(() => {
+      const now = performance.now();
+      const dt = Math.min(0.05, (now - last) / 1000);
+      last = now;
+      state.t = now;
+
+      // Babylon camera → real player position/heading (map space)
+      const p = state.player;
+      p.x = cam.position.x / C;
+      p.y = -cam.position.z / C;
+      const fwd = cam.getDirection(BABYLON.Axis.Z);
+      p.angle = Math.atan2(-fwd.z, fwd.x);
+
+      if (!isDead(p)) {
+        updateCombat(state, dt);            // ← the actual game combat engine
+        for (const e of state.entities) if (e.frameUntil && state.t > e.frameUntil) { e.frame = null; e.frameUntil = 0; }
+      } else {
+        document.getElementById('dead').style.display = 'flex';
+      }
+
+      // sword animation from the real swing state
+      const swing = Math.min(1, (state.t - (p.swingT0 || -9999)) / 260);
+      const charging = chargeStart > 0;
+      if (swing < 1) {
+        const s2 = swing;
+        swordPivot.rotation.set(-1.0 + s2 * 1.9, 0.6 - s2 * 1.4, 0.9 - s2 * 1.1);
+        swordPivot.position.z = 0.72 + Math.sin(s2 * Math.PI) * 0.2; // cuts THROUGH space
+        swordPivot.position.x = 0.34 - Math.sin(s2 * Math.PI) * 0.16;
+      } else if (charging) {
+        swordPivot.rotation.set(-0.95 + Math.sin(now / 90) * 0.02, 0.7, 1.0);
+        swordPivot.position.z = 0.66; swordPivot.position.x = 0.4;
+      } else {
+        swordPivot.rotation.set(-0.55 + Math.sin(now / 700) * 0.03, 0.3, 0.55);
+        swordPivot.position.z = 0.72; swordPivot.position.x = 0.34;
+        swordPivot.position.y = -0.38 + Math.sin(now / 650) * 0.008;
+      }
+      // hurt shake: a quick camera roll
+      cam.rotation.z = state.t < state.fx.shakeUntil ? (Math.random() - 0.5) * 0.03 : cam.rotation.z * 0.8;
+
+      // living lights
+      torch.intensity = lit ? 0.85 + 0.28 * Math.sin(now / 90) * Math.sin(now / 41 + 1.7) : 0;
+      torch.position.x = torchPos.x + Math.sin(now / 130) * 0.05;
+      conduit.intensity = lit ? 0.5 + 0.3 * (0.5 + 0.5 * Math.sin(now / 900)) : 0;
+
+      syncEntities();
+      syncOverlays();
     });
 
     engine.runRenderLoop(() => scene.render());
     window.addEventListener('resize', () => engine.resize());
-    window.__LAB = { scene, cam, engine, setLit };
+    window.__LAB = { scene, cam, engine, setLit, state };
   </script>
 </body>
 </html>
