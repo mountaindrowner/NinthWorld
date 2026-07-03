@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
+  <title>Ninth Delve — The Whisperlock (3D)</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    html, body { width: 100%; height: 100%; background: #0A0A12; overflow: hidden; }
+    /* the 3D world below; the game's own 2D UI floats above it, transparent */
+    #view3d { position: fixed; inset: 0; width: 100%; height: 100%; display: block;
+              image-rendering: pixelated; pointer-events: none; }
+    #ui { position: fixed; inset: 0; width: 100%; height: 100%; display: block;
+          image-rendering: pixelated; cursor: crosshair; outline: none; }
+  </style>
+</head>
+<body>
+  <canvas id="view3d"></canvas>
+  <canvas id="ui" tabindex="0"></canvas>
+  <script src="vendor/babylon.js"></script>
+  <script type="module" src="src/babylon/main3d.js"></script>
+</body>
+</html>

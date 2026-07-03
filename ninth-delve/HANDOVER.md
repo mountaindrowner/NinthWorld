@@ -598,3 +598,44 @@ rolls ("you evade the broken hound") → swings → "you strike the broken hound
 Meaning for the migration estimate: the renderer swap is REAL — the whole
 simulation ran unmodified under Babylon on the first try. Migration cost is
 confirmed to be renderer+UI plumbing only.
+
+## 2026-07-03 — THE FULL DUNGEON IN BABYLON (Mark: "it's amazing, fully create it")
+Shipped `babylon.html` — the complete Whisperlock, playable start to finish in
+true 3D. Architecture (the migration's whole thesis, now proven at full scale):
+**the game still simulates itself** — movement, circle-slide collision, doors,
+combat, intrusions, XP, all the same `src/game/` modules, byte-identical —
+and Babylon is a pure body that mirrors GameState every frame. The camera has
+no physics of its own; it's parented to the player the game already moves.
+New files: `src/babylon/scene3d.js` (the body: geometry/lights/sprites/sword),
+`src/babylon/main3d.js` (fork of main.js: same mode machine + UI, renderer
+swapped), `babylon.html` (3D canvas + transparent UI canvas stacked).
+What the 3D body includes:
+- All 24×24 cells: per-zone wall textures, TEXTURED floors and ceilings,
+  per-zone ceiling heights (Z1 collapsed room 5.2m w/ ceiling hole + light
+  shaft + dust; Z5 core 6m; Z4 chasm cavern 5.6m; gallery 3.8m; corridors 2.6m)
+- The chasm is a REAL PIT: shaft walls plunge to a glowing coolant bed,
+  updraft motes rise; the Gravity Nullifier shows a faint shimmer walkway
+- Doors physically slide open (incl. the glyph-locked L, which opens on
+  solve); secret walls + phase vault vanish when found; glyph pillars are
+  3D pillars that retexture with their rotation (gold when solved)
+- Curated light set: braziers (flickering gold), warren gloom (mauve), gallery
+  glow, chasm updraft (cyan), Z5 core heart, exit glow — plus creature-borne
+  lights (hound seams; the abykos glows brighter mid-drain)
+- Directional billboard creatures (same sprites/frames as classic), corpses,
+  pickups; damage popups + enemy health bars projected onto the UI canvas
+- The 3D sword viewmodel (idle sway / charge / arc), pitch look (up & down),
+  camera-roll hurt shake, P cycles pixel chunkiness
+- ENTIRE 2D UI reused: HUD, modals, cypher menu, glyph puzzle, sheet, report,
+  whispers, calibration prompts, feed — drawn on a transparent overlay canvas
+  in the same 384×216 logical space (input mapping preserved)
+Perf: static geometry merged into one draw call per material. Headless
+SwiftShader (CPU-emulated GPU) runs ~11fps — real GPUs will be far above;
+fps shows top-right, Mark to report real-hardware numbers.
+Also fixed: whisper box no longer wraps mid-word (both builds).
+Verified headless end-to-end: title→delve, corridor walk (real collision),
+laak killed via real combat, scripted Z3 intrusion → glyph puzzle UI over the
+3D scene, chasm cavern + boss room (glowing abykos, boss whisper) — 0 errors.
+Classic raycaster untouched at index.html; ?test=1 suite still green there.
+Known follow-ups: mobile-touch pass for 3D build; feel-tuning pass on look
+sensitivity/fog density from Mark's play; texture upgrade under real light;
+main.js/main3d.js share a lot of forked logic — dedup later.

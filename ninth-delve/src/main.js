@@ -299,8 +299,11 @@ function finishFrame(now) {
     buf.fillStyle = PALETTE.deepSteel; buf.fillRect(20, 6, BUF_W - 40, 22);
     buf.strokeStyle = PALETTE.mauve; buf.lineWidth = 1; buf.strokeRect(20.5, 6.5, BUF_W - 41, 21);
     buf.fillStyle = PALETTE.mauve; buf.font = '8px monospace'; buf.textAlign = 'center';
-    buf.fillText(state.whisper.text.slice(0, 62), BUF_W / 2, 15, BUF_W - 48);
-    if (state.whisper.text.length > 62) buf.fillText(state.whisper.text.slice(62), BUF_W / 2, 24, BUF_W - 48);
+    const wtxt = state.whisper.text;
+    let cut = wtxt.length > 62 ? wtxt.lastIndexOf(' ', 62) : wtxt.length;
+    if (cut <= 0) cut = 62;
+    buf.fillText(wtxt.slice(0, cut), BUF_W / 2, 15, BUF_W - 48);
+    if (cut < wtxt.length) buf.fillText(wtxt.slice(cut + 1), BUF_W / 2, 24, BUF_W - 48);
     buf.globalAlpha = 1;
   }
   // hit flash

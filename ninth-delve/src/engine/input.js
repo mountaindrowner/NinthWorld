@@ -33,7 +33,7 @@ export function createInput(canvas) {
   const state = {
     forward: false, back: false, strafeL: false, strafeR: false,
     turnL: false, turnR: false,
-    yaw: 0, locked: false,
+    yaw: 0, pitch: 0, locked: false, // pitch consumed only by the 3D renderer
     wantPointerLock: false,       // main sets true only in EXPLORE
     viewport: { scale: 1, offX: 0, offY: 0 },
     touchActive: false,           // true once a touch is seen → analog move + on-screen UI
@@ -45,6 +45,7 @@ export function createInput(canvas) {
     _swings: [],                  // realtime melee: {heavy} per press (LMB / Space)
     swingCharging: 0,             // >0 = mousedown timestamp (heavy charge underway)
     consumeYaw() { const y = this.yaw; this.yaw = 0; return y; },
+    consumePitch() { const p = this.pitch; this.pitch = 0; return p; },
     takeInteract() { const v = this._interact; this._interact = false; return v; },
     takeClick() { return this._clicks.shift() || null; },
     takeKey() { return this._keys.shift() || null; },
@@ -67,7 +68,7 @@ export function createInput(canvas) {
   window.addEventListener('keyup', (e) => { if (HELD[e.code]) { state[HELD[e.code]] = false; e.preventDefault(); } });
 
   document.addEventListener('pointerlockchange', () => { state.locked = document.pointerLockElement === canvas; });
-  document.addEventListener('mousemove', (e) => { if (state.locked) state.yaw += e.movementX; });
+  document.addEventListener('mousemove', (e) => { if (state.locked) { state.yaw += e.movementX; state.pitch += e.movementY; } });
 
   // pointer-locked mouse = the sword arm: tap to swing, hold ≥350ms for a heavy
   // (Effort) swing released on mouseup — Morrowind's hold-attack, Cypher inside.
