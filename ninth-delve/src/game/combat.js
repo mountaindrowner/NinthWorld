@@ -17,8 +17,8 @@ import { CELL } from '../data/map_whisperlock.js';
 import { overLimit } from './state.js';
 
 const SWING_MS = 550, HEAVY_MS = 800;      // attack cooldowns
-const REACH = 1.6;                          // melee reach in tiles
-const ARC = Math.PI / 3;                    // swing arc half-angle
+const REACH = 2.2;                          // melee reach in tiles (a broadsword is long)
+const ARC = Math.PI / 2.8;                  // swing arc half-angle
 const LEASH = 7;                            // disengage beyond aggro + this
 
 // per-creature realtime tuning: move speed (tiles/s), attack cooldown (ms), reach
@@ -53,6 +53,7 @@ export function playerSwing(state, heavy = false) {
   if (state.t < (p.swingCooldownUntil || 0) || isDebilitated(p) || isDead(p)) return;
   p.swingCooldownUntil = state.t + (heavy ? HEAVY_MS : SWING_MS);
   p.swingT0 = state.t; p.swingHeavy = heavy;   // viewmodel animation
+  p.swingCombo = ((p.swingCombo || 0) + 1);    // alternating cut animation
   sfx.swing?.();
 
   // Effort on the heavy swing — costs Might, eases the roll. Free if broke.

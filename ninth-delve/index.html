@@ -10,7 +10,7 @@
     html, body { width: 100%; height: 100%; background: var(--void); overflow: hidden; }
     body { display: block; font-family: monospace; color: var(--bone); }
     /* integer-upscaled pixel buffer (Tech §3) */
-    #screen { display: block; width: 100vw; height: 100vh; image-rendering: pixelated; cursor: crosshair; }
+    #screen { display: block; width: 100vw; height: 100vh; image-rendering: pixelated; cursor: crosshair; touch-action: none; }
     /* UI roots — populated per milestone (hud M2, dicetray M3, menus M4, report M7) */
     #ui { position: fixed; inset: 0; pointer-events: none; }
     #ui > * { position: absolute; pointer-events: auto; }

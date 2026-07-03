@@ -639,3 +639,30 @@ Classic raycaster untouched at index.html; ?test=1 suite still green there.
 Known follow-ups: mobile-touch pass for 3D build; feel-tuning pass on look
 sensitivity/fog density from Mark's play; texture upgrade under real light;
 main.js/main3d.js share a lot of forked logic — dedup later.
+
+## 2026-07-03 — Polish pass: UI look, sword combo, reach, PHONE support
+Mark's playtest notes (he plays on a phone!) addressed:
+- **"Can't look up" solved**: he was on touch, and look-drag only fed yaw.
+  Touch vertical drag now feeds pitch (input.js) — phones look up/down in 3D.
+- **Touch heavy attack**: ATK button is now press-AND-HOLD (≥350ms = heavy,
+  same contract as the mouse); touch-action:none on both builds stops
+  browser zoom/scroll fighting the game.
+- **Sword**: bigger (scale .62, closer to center), and swings are now CUTS —
+  alternating combo driven by new `player.swingCombo` (set in playerSwing,
+  game-side): odd = overhead chop raised high → cleaves down through center;
+  even = high-right → low-left cross slash. Both LUNGE forward (+0.5m z) so
+  the extended reach reads visually. Charge pose = wound up overhead.
+  Classic 2D viewmodel alternates its arc by the same combo counter.
+- **Reach**: REACH 1.6 → 2.2 tiles, ARC π/3 → π/2.8 — hits land from farther,
+  matching a broadsword's length (Mark: "feel like I'm hitting a little
+  farther from me").
+- **UI beautification** (shared widgets.js + hud.js → both builds):
+  panels get drop shadow, vertical gradient, void edge + gold pinstripe,
+  gold corner notches, dark title bar with cyanDeep divider; buttons get
+  raised gradient body, top sheen, accent tick, ↵ glyph for Enter; bars get
+  fill sheen, lower-half depth, quarter ticks; HUD strip is a gradient plate
+  with gold+cyan hairlines, double-framed notched portrait, recessed cypher
+  sockets that glow gold when filled.
+Verified headless: classic ?test=1 green · 3D zero errors · phone context:
+stick walk (22.5→20.4), look-drag pitch −0.18 (LOOKING UP), hold-ATK produced
+a heavy swing. Screenshots: overhead chop mid-cut w/ damage popup; new menus.

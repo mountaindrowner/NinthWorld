@@ -158,7 +158,8 @@ function drawViewmodel() {
   const charging = input.swingCharging > 0;
   const px = BUF_W * 0.78, py = BUF_H + 26; // pivot below the frame edge
   let ang;
-  if (swing < 1) ang = -1.15 + swing * 1.65;            // the cut
+  const backhand = (p.swingCombo || 0) % 2 === 0;       // alternating combo cuts
+  if (swing < 1) ang = backhand ? (0.45 - swing * 1.6) : (-1.15 + swing * 1.65);
   else if (charging) ang = -1.0 + Math.sin(state.t / 90) * 0.02; // wound up
   else ang = -0.55 + Math.sin(state.t / 700) * 0.04;    // idle sway
 

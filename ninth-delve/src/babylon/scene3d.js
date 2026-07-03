@@ -267,8 +267,8 @@ export function createScene3D(canvas, state, assets) {
   // --- the sword (from the lab, tuned) ----------------------------------------
   const swordPivot = new BABYLON.TransformNode('swp', scene);
   swordPivot.parent = cam;
-  swordPivot.position = new BABYLON.Vector3(0.34, -0.38, 0.72);
-  swordPivot.scaling = new BABYLON.Vector3(0.45, 0.45, 0.45);
+  swordPivot.position = new BABYLON.Vector3(0.3, -0.34, 0.62);
+  swordPivot.scaling = new BABYLON.Vector3(0.62, 0.62, 0.62); // prominent in view
   const bladeMat = new BABYLON.StandardMaterial('blm', scene);
   bladeMat.diffuseColor = BABYLON.Color3.FromHexString(PALETTE.boneLight);
   bladeMat.emissiveColor = BABYLON.Color3.FromHexString(PALETTE.boneLight).scale(0.25);
@@ -358,21 +358,32 @@ export function createScene3D(canvas, state, assets) {
     houndGlow.intensity = houndLit ? 0.5 : 0;
     if (!bossLit) bossGlow.intensity = 0;
 
-    // sword animation from the real swing state
-    const swing = Math.min(1, (t - (p.swingT0 || -9999)) / 260);
+    // sword animation — alternating combo cuts, both slashing DOWN/through,
+    // with real forward extension so the long reach reads visually
+    const swing = Math.min(1, (t - (p.swingT0 || -9999)) / 280);
     const charging = input.swingCharging > 0;
     if (swing < 1) {
-      const s2 = swing;
-      swordPivot.rotation.set(-1.0 + s2 * 1.9, 0.6 - s2 * 1.4, 0.9 - s2 * 1.1);
-      swordPivot.position.z = 0.72 + Math.sin(s2 * Math.PI) * 0.2;
-      swordPivot.position.x = 0.34 - Math.sin(s2 * Math.PI) * 0.16;
+      const s2 = swing, ext = Math.sin(s2 * Math.PI);
+      if ((p.swingCombo || 0) % 2 === 1) {
+        // overhead chop: raised high behind, cleaves down through center
+        swordPivot.rotation.set(-2.1 + s2 * 2.9, 0.25 - s2 * 0.35, 0.15 - s2 * 0.1);
+        swordPivot.position.x = 0.3 - ext * 0.24;          // toward center
+        swordPivot.position.y = -0.34 + (1 - s2) * 0.28;   // starts raised
+        swordPivot.position.z = 0.62 + ext * 0.55;         // LUNGES forward
+      } else {
+        // cross slash: high right → low left, diagonal
+        swordPivot.rotation.set(-1.5 + s2 * 2.0, 0.9 - s2 * 1.8, 0.7 - s2 * 1.2);
+        swordPivot.position.x = 0.42 - ext * 0.45;
+        swordPivot.position.y = -0.28 - s2 * 0.12;
+        swordPivot.position.z = 0.62 + ext * 0.5;
+      }
     } else if (charging) {
-      swordPivot.rotation.set(-0.95 + Math.sin(t / 90) * 0.02, 0.7, 1.0);
-      swordPivot.position.z = 0.66; swordPivot.position.x = 0.4;
+      // wound up overhead, trembling with held force
+      swordPivot.rotation.set(-2.0 + Math.sin(t / 80) * 0.03, 0.25, 0.15);
+      swordPivot.position.set(0.3, -0.06, 0.55);
     } else {
-      swordPivot.rotation.set(-0.55 + Math.sin(t / 700) * 0.03, 0.3, 0.55);
-      swordPivot.position.z = 0.72; swordPivot.position.x = 0.34;
-      swordPivot.position.y = -0.38 + Math.sin(t / 650) * 0.008;
+      swordPivot.rotation.set(-0.55 + Math.sin(t / 700) * 0.03, 0.3, 0.45);
+      swordPivot.position.set(0.3, -0.34 + Math.sin(t / 650) * 0.008, 0.62);
     }
   }
 

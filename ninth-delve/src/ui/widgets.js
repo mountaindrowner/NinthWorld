@@ -5,13 +5,26 @@
 import { PALETTE } from '../engine/texgen.js';
 
 export function panel(ctx, x, y, w, h, title) {
-  ctx.fillStyle = PALETTE.deepSteel;
-  ctx.globalAlpha = 0.94; ctx.fillRect(x, y, w, h); ctx.globalAlpha = 1;
-  ctx.strokeStyle = PALETTE.gold; ctx.lineWidth = 1;
+  // drop shadow → body gradient → void outer edge → gold pinstripe → notched corners
+  ctx.globalAlpha = 0.55; ctx.fillStyle = PALETTE.void;
+  ctx.fillRect(x + 3, y + 3, w, h);
+  ctx.globalAlpha = 0.96;
+  const g = ctx.createLinearGradient(0, y, 0, y + h);
+  g.addColorStop(0, PALETTE.steel); g.addColorStop(0.18, PALETTE.deepSteel); g.addColorStop(1, PALETTE.void);
+  ctx.fillStyle = g; ctx.fillRect(x, y, w, h);
+  ctx.globalAlpha = 1;
+  ctx.strokeStyle = PALETTE.void; ctx.lineWidth = 1;
   ctx.strokeRect(x + 0.5, y + 0.5, w - 1, h - 1);
+  ctx.strokeStyle = PALETTE.gold;
+  ctx.strokeRect(x + 2.5, y + 2.5, w - 5, h - 5);
+  ctx.fillStyle = PALETTE.goldGlow;
+  for (const [cx, cy] of [[x + 1, y + 1], [x + w - 4, y + 1], [x + 1, y + h - 4], [x + w - 4, y + h - 4]]) ctx.fillRect(cx, cy, 3, 3);
   if (title) {
-    ctx.fillStyle = PALETTE.gold; ctx.font = '8px monospace'; ctx.textAlign = 'left';
-    ctx.fillText(title.toUpperCase(), x + 5, y + 9);
+    ctx.globalAlpha = 0.4; ctx.fillStyle = PALETTE.void;
+    ctx.fillRect(x + 4, y + 4, w - 8, 11); ctx.globalAlpha = 1;
+    text(ctx, title.toUpperCase(), x + 8, y + 12, { color: PALETTE.goldGlow });
+    ctx.strokeStyle = PALETTE.cyanDeep;
+    ctx.beginPath(); ctx.moveTo(x + 6, y + 15.5); ctx.lineTo(x + w - 6, y + 15.5); ctx.stroke();
   }
 }
 
@@ -52,12 +65,22 @@ const inside = (c, b) => c.x >= b.x && c.x <= b.x + b.w && c.y >= b.y && c.y <= 
  */
 export function button(ctx, b, clicks, keys) {
   const dim = b.disabled;
-  ctx.fillStyle = dim ? PALETTE.steel : PALETTE.deepSteel;
-  ctx.fillRect(b.x, b.y, b.w, b.h);
-  ctx.strokeStyle = dim ? PALETTE.boneShadow : (b.accent || PALETTE.cyan); ctx.lineWidth = 1;
+  const accent = dim ? PALETTE.boneShadow : (b.accent || PALETTE.cyan);
+  // raised body: gradient fill, top highlight, void seat
+  ctx.fillStyle = PALETTE.void; ctx.fillRect(b.x + 1, b.y + 1, b.w, b.h); // seat shadow
+  const g = ctx.createLinearGradient(0, b.y, 0, b.y + b.h);
+  g.addColorStop(0, dim ? PALETTE.deepSteel : PALETTE.steel);
+  g.addColorStop(1, PALETTE.deepSteel);
+  ctx.fillStyle = g; ctx.fillRect(b.x, b.y, b.w, b.h);
+  ctx.strokeStyle = accent; ctx.lineWidth = 1;
   ctx.strokeRect(b.x + 0.5, b.y + 0.5, b.w - 1, b.h - 1);
+  if (!dim) { // top light + accent tick
+    ctx.globalAlpha = 0.35; ctx.fillStyle = PALETTE.staticWhite;
+    ctx.fillRect(b.x + 1, b.y + 1, b.w - 2, 1); ctx.globalAlpha = 1;
+    ctx.fillStyle = accent; ctx.fillRect(b.x + 1, b.y + b.h - 3, 2, 2);
+  }
   ctx.font = '8px monospace'; ctx.textAlign = 'left';
-  const hk = b.hotkey ? `${b.hotkey.replace('Digit', '')} ` : '';
+  const hk = b.hotkey ? `${b.hotkey === 'Enter' ? '\u21B5' : b.hotkey.replace('Digit', '')} ` : '';
   outlined(ctx, hk + b.label, b.x + 4, b.y + Math.round(b.h / 2) + 3, dim ? PALETTE.boneShadow : PALETTE.boneLight);
   if (dim) return false;
 
@@ -70,9 +93,20 @@ export function button(ctx, b, clicks, keys) {
   return false;
 }
 
-/** A horizontal value bar (pool/health). */
+/** A horizontal value bar (pool/health): filled gradient, sheen, quarter ticks. */
 export function bar(ctx, x, y, w, h, frac, color) {
   ctx.fillStyle = PALETTE.void; ctx.fillRect(x, y, w, h);
-  ctx.fillStyle = color; ctx.fillRect(x + 1, y + 1, Math.max(0, Math.round((w - 2) * frac)), h - 2);
+  const fw = Math.max(0, Math.round((w - 2) * Math.min(1, frac)));
+  if (fw > 0) {
+    ctx.fillStyle = color; ctx.fillRect(x + 1, y + 1, fw, h - 2);
+    ctx.globalAlpha = 0.35; ctx.fillStyle = PALETTE.void;          // depth on lower half
+    ctx.fillRect(x + 1, y + Math.ceil(h / 2), fw, Math.floor(h / 2) - 1);
+    ctx.globalAlpha = 0.45; ctx.fillStyle = PALETTE.staticWhite;   // sheen on top
+    ctx.fillRect(x + 1, y + 1, fw, 1);
+    ctx.globalAlpha = 1;
+  }
+  ctx.globalAlpha = 0.5; ctx.fillStyle = PALETTE.void;             // quarter ticks
+  for (let q = 1; q < 4; q++) ctx.fillRect(x + Math.round((w * q) / 4), y + 1, 1, h - 2);
+  ctx.globalAlpha = 1;
   ctx.strokeStyle = PALETTE.boneShadow; ctx.lineWidth = 1; ctx.strokeRect(x + 0.5, y + 0.5, w - 1, h - 1);
 }

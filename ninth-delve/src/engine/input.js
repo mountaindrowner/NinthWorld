@@ -95,7 +95,6 @@ export function createInput(canvas) {
 
   const fireButton = (id) => {
     if (id === 'interact') state._interact = true;
-    else if (id === 'swing') state._swings.push({ heavy: false });
     else state._keys.push(id);
   };
 
@@ -105,9 +104,13 @@ export function createInput(canvas) {
       const b = toBuffer(t);
       if (!state.wantPointerLock) { state._clicks.push(b); active.set(t.identifier, { role: 'tap' }); continue; }
       const btn = TOUCH_UI.buttons.find((r) => inRect(b, r));
-      if (btn) { fireButton(btn.id); active.set(t.identifier, { role: 'button' }); continue; }
+      if (btn) {
+        if (btn.id === 'swing') { state.swingCharging = performance.now(); active.set(t.identifier, { role: 'swingBtn' }); }
+        else { fireButton(btn.id); active.set(t.identifier, { role: 'button' }); }
+        continue;
+      }
       if (b.x < BUF_W / 2) { active.set(t.identifier, { role: 'move', ox: t.clientX, oy: t.clientY }); }
-      else { active.set(t.identifier, { role: 'look', prevX: t.clientX }); }
+      else { active.set(t.identifier, { role: 'look', prevX: t.clientX, prevY: t.clientY }); }
     }
     e.preventDefault();
   }, { passive: false });
@@ -122,6 +125,7 @@ export function createInput(canvas) {
         state.knob = { x: state.analogX * TOUCH_UI.joy.r, y: state.analogY * TOUCH_UI.joy.r };
       } else if (a.role === 'look') {
         state.yaw += (t.clientX - a.prevX); a.prevX = t.clientX;
+        state.pitch += (t.clientY - a.prevY); a.prevY = t.clientY; // phones can look up now
       }
     }
     e.preventDefault();
@@ -131,6 +135,10 @@ export function createInput(canvas) {
     for (const t of e.changedTouches) {
       const a = active.get(t.identifier);
       if (a && a.role === 'move') { state.analogX = 0; state.analogY = 0; state.knob = { x: 0, y: 0 }; }
+      if (a && a.role === 'swingBtn') { // hold ATK = heavy swing, like the mouse
+        state._swings.push({ heavy: performance.now() - state.swingCharging >= 350 });
+        state.swingCharging = 0;
+      }
       active.delete(t.identifier);
     }
     e.preventDefault();
