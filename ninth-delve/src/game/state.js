@@ -35,8 +35,9 @@ export function createGameState(rng, seed) {
       oddities: [],
       cypherLimit: KAVE.cypherLimit,
       aggression: false,          // Aggression stance toggle
-      defending: false,           // Defend action flag (eased defenses next enemy phase)
-      stimRounds: 0,              // Stim Burst: ease all actions N rounds
+      stimUntil: 0,               // Stim Burst: all actions eased until this ms
+      swingCooldownUntil: 0,      // realtime melee cooldown
+      swingT0: -9999, swingHeavy: false, // viewmodel swing animation
       weaponBonus: 0,             // Density Nodule: +2 damage rest of delve
       restsUsed: 0,               // daily recovery sequence index (0..3)
       armorPenalty: 0,            // Z2 intrusion: −1 armor until rest
@@ -78,6 +79,18 @@ export function requestWhisper(state, key) {
 /** Screen-shake / hit-flash juice (M7). */
 export function shake(state, mag, ms) { state.fx.shakeUntil = state.t + ms; state.fx.mag = mag; }
 export function flash(state, color, ms) { state.fx.flashUntil = state.t + ms; state.fx.flashColor = color; }
+
+/** Roll feed (Morrowind-style message log): the dice stay honest, off to the side. */
+export function feedLine(state, txt, color) {
+  (state.rollFeed ||= []).push({ txt, color, t0: state.t });
+  if (state.rollFeed.length > 6) state.rollFeed.shift();
+}
+
+/** World-anchored damage popup, rendered by the raycaster. */
+export function addPopup(state, x, y, txt, color) {
+  (state.popups ||= []).push({ x, y, txt, color, t0: state.t });
+  if (state.popups.length > 12) state.popups.shift();
+}
 
 /** Push a short event line (kept to the last 6 for the HUD ticker). */
 export function logEvent(state, msg) {

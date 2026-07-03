@@ -141,6 +141,45 @@ function renderSprites(ctx, state, assets, dirX, dirY, planeX, planeY) {
         ctx.fillRect(drawX, topY, 1, spriteH); ctx.globalAlpha = 1;
       }
     }
+
+    // health bar over hurt, visible creatures (realtime combat readability)
+    if (e.kind === 'creature' && e.hp < e.maxHp && e.alive) {
+      const cx = Math.round(screenX);
+      if (cx >= 0 && cx < BUF_W && tY < zBuffer[cx]) {
+        const bw = Math.max(10, Math.min(28, spriteW * 0.6));
+        const bx = Math.round(screenX - bw / 2), byy = Math.round(topY - 5);
+        ctx.fillStyle = PALETTE.void; ctx.fillRect(bx - 1, byy - 1, bw + 2, 4);
+        ctx.fillStyle = PALETTE.blood;
+        ctx.fillRect(bx, byy, Math.max(1, Math.round(bw * (e.hp / e.maxHp))), 2);
+      }
+    }
+  }
+
+  renderPopups(ctx, state, dirX, dirY, planeX, planeY);
+}
+
+/** World-anchored damage popups: project like sprites, rise and fade over 900ms. */
+function renderPopups(ctx, state, dirX, dirY, planeX, planeY) {
+  if (!state.popups?.length) return;
+  const p = state.player;
+  const invDet = 1 / (planeX * dirY - dirX * planeY);
+  state.popups = state.popups.filter((pop) => state.t - pop.t0 < 900);
+  ctx.font = '8px monospace'; ctx.textAlign = 'center';
+  for (const pop of state.popups) {
+    const sx = pop.x - p.x, sy = pop.y - p.y;
+    const tX = invDet * (dirY * sx - dirX * sy);
+    const tY = invDet * (-planeY * sx + planeX * sy);
+    if (tY <= 0.15) continue;
+    const cx = Math.round((BUF_W / 2) * (1 + tX / tY));
+    if (cx < 0 || cx >= BUF_W || tY >= zBuffer[cx]) continue;
+    const age = (state.t - pop.t0) / 900;
+    const yy = Math.round(HORIZON - (BUF_H / tY) * 0.35 - age * 14);
+    ctx.globalAlpha = 1 - age * 0.7;
+    ctx.fillStyle = PALETTE.void;
+    for (const [ox, oy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) ctx.fillText(pop.txt, cx + ox, yy + oy);
+    ctx.fillStyle = pop.color;
+    ctx.fillText(pop.txt, cx, yy);
+    ctx.globalAlpha = 1;
   }
 }
 

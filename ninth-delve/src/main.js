@@ -9,7 +9,7 @@ import { WHISPERS } from './data/whispers.js';
 import { spawnExploreEntities } from './game/entities.js';
 import { connectivityTest, moveWithCollision, updateDoors, interact, startClimb, zoneAt, tileDist, hasLOS, cellAt } from './game/world.js';
 import { effortCost, applyDamage } from './game/player.js';
-import { maybeTrigger } from './game/combat.js';
+import { updateCombat, playerSwing, tryRest, toggleAggression } from './game/combat.js';
 import { useCypher, drainRandomCypher } from './game/cyphers.js';
 import { pumpScripted, queueScripted, scriptedIntrusion } from './game/intrusions.js';
 import { CREATURES, armorVs } from './data/creatures.js';
@@ -17,12 +17,11 @@ import { CELL, MURALS } from './data/map_whisperlock.js';
 import { render as renderView } from './engine/raycaster.js';
 import { createInput } from './engine/input.js';
 import { drawHud } from './ui/hud.js';
-import { drawModal, drawSheet, drawEncounterMenu, drawCypherMenu, drawGlyphPuzzle } from './ui/menus.js';
-import { openTray, updateTray, drawTray } from './ui/dicetray.js';
+import { drawModal, drawSheet, drawCypherMenu, drawGlyphPuzzle } from './ui/menus.js';
+import { updateTray, drawTray } from './ui/dicetray.js';
 import { drawReport } from './ui/report.js';
 import { drawTouchControls } from './ui/touch.js';
 import { text as uiText } from './ui/widgets.js';
-import { KAVE } from './data/pregen_kave.js';
 
 import { BUF_W, BUF_H } from './engine/screen.js';
 const MOVE_FWD = 4, MOVE_STRAFE = 3, TURN_RATE = 2.5, MOUSE_SENS = 0.0022;
@@ -123,9 +122,12 @@ function updateExplore(dt) {
     else if (ev) openModal(ev);
   }
 
+  // realtime melee: LMB tap = swing, hold = heavy (Effort); Space taps too
+  for (let s; (s = input.takeSwing());) playerSwing(state, s.heavy);
+  updateCombat(state, dt);      // creature AI: aggro, chase, strike, leash
+
   exploreWorldEvents();
   pumpScripted(state);          // fire any queued scripted intrusion when idle
-  if (state.mode === 'EXPLORE') maybeTrigger(state); // LOS + aggro → ENCOUNTER
 }
 
 function openGlyph() {
@@ -136,22 +138,41 @@ function openGlyph() {
   else state.mode = 'GLYPH';
 }
 
-/** M3 demo: a full skill+asset+Effort attack roll to exercise the tray (R). */
-function practiceRoll() {
-  openTray(state, {
-    label: 'practice: strike',
-    base: 5,
-    eases: [{ label: 'skill', steps: 1 }, { label: 'asset', steps: 1 }],
-    hinders: [],
-    stat: 'might',
-    maxEffort: state.player.effort,
-  }, (audit) => {
-    if (!audit.success) { logEvent(state, 'practice: miss'); return; }
-    const dmg = KAVE.weapons.broadsword.damage + state.player.weaponBonus
-      + (audit.specialChoice === 'damage' ? audit.special.bonusDamage : audit.special.bonusDamage);
-    logEvent(state, `practice: hit for ${dmg}`);
-  });
-  input.clearBuffered();
+/** First-person broadsword viewmodel: idle sway, charge pull-back, swing arc. */
+function drawViewmodel() {
+  const p = state.player;
+  const swing = Math.min(1, (state.t - p.swingT0) / 260);
+  const charging = input.swingCharging > 0;
+  const px = BUF_W * 0.78, py = BUF_H + 26; // pivot below the frame edge
+  let ang;
+  if (swing < 1) ang = -1.15 + swing * 1.65;            // the cut
+  else if (charging) ang = -1.0 + Math.sin(state.t / 90) * 0.02; // wound up
+  else ang = -0.55 + Math.sin(state.t / 700) * 0.04;    // idle sway
+
+  buf.save();
+  buf.translate(px, py); buf.rotate(ang);
+  const L = 96, W2 = 5;
+  buf.fillStyle = PALETTE.boneLight; buf.fillRect(-W2, -L, W2 * 2, L - 26); // blade
+  buf.fillStyle = PALETTE.steelLight; buf.fillRect(-W2, -L, W2, L - 26);    // shaded edge
+  buf.fillStyle = PALETTE.boneLight;
+  buf.beginPath(); buf.moveTo(-W2, -L); buf.lineTo(0, -L - 12); buf.lineTo(W2, -L); buf.fill(); // tip
+  buf.fillStyle = charging ? PALETTE.goldGlow : PALETTE.gold; buf.fillRect(-15, -28, 30, 6);    // guard
+  buf.fillStyle = PALETTE.rustDeep; buf.fillRect(-4, -22, 8, 24);           // grip
+  buf.restore();
+}
+
+/** Morrowind-style roll feed: the background dice, honestly reported. */
+function drawRollFeed() {
+  if (!state.rollFeed?.length) return;
+  let fy = 40;
+  for (const l of state.rollFeed) {
+    const age = (state.t - l.t0) / 4500;
+    if (age > 1) continue;
+    buf.globalAlpha = Math.min(1, (1 - age) * 3);
+    uiText(buf, l.txt, 4, fy, { color: l.color || PALETTE.boneLight });
+    fy += 10;
+  }
+  buf.globalAlpha = 1;
 }
 
 function drawCrosshair() {
@@ -188,16 +209,18 @@ function loop(now) {
 
   if (modeAtStart === 'EXPLORE') {
     updateExplore(dt);
-    if (keys.includes('KeyR')) practiceRoll();
-    else if (keys.includes('Tab')) { state.mode = 'SHEET'; document.exitPointerLock?.(); input.clearBuffered(); }
+    if (keys.includes('KeyR')) tryRest(state);
+    if (keys.includes('KeyF')) toggleAggression(state);
+    if (keys.includes('Tab')) { state.mode = 'SHEET'; document.exitPointerLock?.(); input.clearBuffered(); }
     else if (keys.includes('KeyC')) { state.cypherMenu = { context: 'explore', ret: 'EXPLORE' }; state.mode = 'CYPHERS'; document.exitPointerLock?.(); input.clearBuffered(); }
   } else if (modeAtStart === 'ROLL') {
     updateTray(state, dt);
   }
 
   renderView(buf, state, assets);
-  if (state.mode === 'EXPLORE') drawCrosshair();
+  if (state.mode === 'EXPLORE') { drawViewmodel(); drawCrosshair(); }
   drawHud(buf, state, assets);
+  drawRollFeed();
   if (state.mode === 'EXPLORE' && input.touchActive) drawTouchControls(buf, input);
 
   if (modeAtStart === 'MODAL' && state.mode === 'MODAL') {
@@ -212,8 +235,6 @@ function loop(now) {
     if (drawSheet(buf, state, clicks, keys, assets)) { state.mode = 'EXPLORE'; input.clearBuffered(); }
   } else if (modeAtStart === 'GLYPH' && state.mode === 'GLYPH') {
     if (drawGlyphPuzzle(buf, state, clicks, keys)) { state.mode = 'EXPLORE'; input.clearBuffered(); }
-  } else if (modeAtStart === 'ENCOUNTER' && state.mode === 'ENCOUNTER') {
-    drawEncounterMenu(buf, state, clicks, keys);
   } else if (modeAtStart === 'CYPHERS' && state.mode === 'CYPHERS') {
     drawCypherMenu(buf, state, clicks, keys);
   } else if (state.mode === 'REPORT') {
@@ -311,20 +332,22 @@ function rosterTests() {
   ok('abykos Armor: energy/cypher 0', armorVs(CREATURES.abykos, 'energy') === 0);
 
   const mkState = () => ({
-    rng: () => 0.4, stats: { cyphersUsed: 0, kills: 0, secrets: 0 }, log: [],
+    rng: () => 0.4, t: 1000, stats: { cyphersUsed: 0, kills: 0, secrets: 0 }, log: [],
     entities: [], secretsFound: new Set(), phasedCells: new Set(), discoveredZones: new Set(),
-    player: { pools: { might: 10, speed: 12, intellect: 8 }, poolMax: { might: 14, speed: 12, intellect: 8 }, edge: { might: 1, speed: 1, intellect: 0 }, track: 'hale', weaponBonus: 0, stimRounds: 0, crossing: false, x: 1.5, y: 22.5, angle: Math.PI, cyphers: [] },
+    doors: {}, glyph: { solved: false }, popups: [],
+    player: { pools: { might: 10, speed: 12, intellect: 8 }, poolMax: { might: 14, speed: 12, intellect: 8 }, edge: { might: 1, speed: 1, intellect: 0 }, track: 'hale', weaponBonus: 0, stimUntil: 0, crossing: false, x: 1.5, y: 22.5, angle: Math.PI, cyphers: [] },
   });
   let s = mkState();
   s.player.cyphers = [{ id: 'C4', effect: 'density', level: 3, identified: false, trueName: 'Density Nodule' }];
   useCypher(s, 0); ok('C4 Density: +2 weapon, consumed', s.player.weaponBonus === 2 && s.player.cyphers.length === 0);
-  s.player.cyphers = [{ id: 'C6', effect: 'stim', level: 2, identified: false }]; useCypher(s, 0); ok('C6 Stim: 3 rounds', s.player.stimRounds === 3);
+  s.player.cyphers = [{ id: 'C6', effect: 'stim', level: 2, identified: false }]; useCypher(s, 0); ok('C6 Stim: eases until t+15s', s.player.stimUntil === s.t + 15000);
   s.player.cyphers = [{ id: 'C3', effect: 'gravity', level: 4, identified: false }]; useCypher(s, 0); ok('C3 Gravity: chasm crossable', s.player.crossing === true);
   s.player.cyphers = [{ id: 'C1', effect: 'rejuvenate', level: 2, identified: false, trueName: 'Rejuvenator' }]; useCypher(s, 0); ok('C1 Rejuvenator: heals Might', s.player.pools.might > 10);
   s.player.cyphers = [{ id: 'C5', effect: 'phase', level: 3, identified: false }]; useCypher(s, 0); ok('C5 Phase: opens a wall', s.phasedCells.size === 1);
-  const combat = { enemies: [{ alive: true, band: 'immediate', hp: 3, def: CREATURES.laak, ent: { alive: true } }] };
-  s.player.cyphers = [{ id: 'C2', effect: 'detonation', level: 2, identified: false }]; s.encounter = combat;
-  useCypher(s, 0, combat); ok('C2 Detonation: energy damage kills laak', combat.enemies[0].hp <= 0);
+  // detonation vs a live world creature standing beside the player
+  s.entities = [{ uid: 1, kind: 'creature', creatureId: 'laak', alive: true, hidden: false, x: 2.5, y: 22.5, hp: 3, maxHp: 3 }];
+  s.player.cyphers = [{ id: 'C2', effect: 'detonation', level: 2, identified: false }];
+  useCypher(s, 0); ok('C2 Detonation: energy damage kills laak', s.entities[0].hp <= 0 && !s.entities[0].alive);
   s.player.cyphers = [{ id: 'C1', effect: 'rejuvenate', level: 2 }]; drainRandomCypher(s, 1); ok('Abykos Drain: L2→1', s.player.cyphers[0]?.level === 1);
   drainRandomCypher(s, 1); ok('Abykos Drain: destroyed at 0', s.player.cyphers.length === 0);
   return c;

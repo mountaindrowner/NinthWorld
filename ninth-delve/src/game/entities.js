@@ -51,7 +51,7 @@ export function spawnExploreEntities(rng) {
       const [ex, ey] = creatureSlots[i] || [p.x + 0.5, p.y + 0.5];
       entities.push({
         uid: uid++, kind: 'creature', creatureId: cid, sprite: def.sprite,
-        x: ex, y: ey, hp: def.hp, alive: true, group: p.id, zone: p.zone,
+        x: ex, y: ey, hp: def.hp, maxHp: def.hp, alive: true, group: p.id, zone: p.zone,
         home: { x: p.x + 0.5, y: p.y + 0.5 }, aggro: def.aggro, engaged: false,
       });
     });

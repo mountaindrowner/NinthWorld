@@ -5,7 +5,6 @@
 import { PALETTE } from '../engine/texgen.js';
 import { panel, text, wrapText, button, bar } from './widgets.js';
 import { KAVE } from '../data/pregen_kave.js';
-import { availableActions, playerAction, useCypherInCombat, examineInCombat } from '../game/combat.js';
 import { useCypher, examineSpec, applyExamine } from '../game/cyphers.js';
 import { openTray } from './dicetray.js';
 import { logEvent, awardXP } from '../game/state.js';
@@ -14,28 +13,6 @@ import { tableIntrusion } from '../game/intrusions.js';
 const GLYPH_SYM = ['◇', '△', '▽', '▣'];
 
 import { BUF_W, BUF_H } from '../engine/screen.js';
-
-/** Encounter status + action menu (drawn while mode==='ENCOUNTER'). */
-export function drawEncounterMenu(ctx, state, clicks, keys) {
-  const e = state.encounter;
-  if (!e) return;
-  panel(ctx, 4, 4, 172, 12 + e.enemies.length * 10, `round ${e.round}`);
-  let y = 24;
-  for (const en of e.enemies) {
-    const col = en.alive ? PALETTE.boneLight : PALETTE.boneShadow;
-    const tag = `${en.name}  ${Math.max(0, en.hp)}/${en.maxHp} [${en.band.slice(0, 3)}]${en.stunned ? ' stun' : ''}${en.alive ? '' : ' †'}`;
-    text(ctx, tag, 10, y, { size: 8, color: col });
-    y += 10;
-  }
-  if (e.phase !== 'player') { text(ctx, '… enemy phase', 10, y + 2, { size: 8, color: PALETTE.rust }); return; }
-
-  const acts = availableActions(state);
-  let bx = 2, by = 130; const bw = 76, bh = 14; let col = 0;
-  acts.forEach((act, i) => {
-    if (button(ctx, { x: bx, y: by, w: bw, h: bh, label: act.label, hotkey: `Digit${i + 1}`, disabled: act.disabled }, clicks, keys)) playerAction(state, act.id);
-    if (++col === 4) { col = 0; bx = 2; by += bh + 2; } else bx += bw + 4;
-  });
-}
 
 /**
  * Cypher list (mode==='CYPHERS'): Use / Examine each carried cypher, from either
@@ -65,13 +42,12 @@ export function drawCypherMenu(ctx, state, clicks, keys) {
 
 function closeCyphers(state) { state.mode = state.cypherMenu?.ret || 'EXPLORE'; state.cypherMenu = null; }
 
+// Menus pause the world (Morrowind-style), so using/examining is never rushed.
 function doUse(state, cm, idx) {
-  if (cm.context === 'combat') { useCypherInCombat(state, idx); return; }
-  logEvent(state, useCypher(state, idx)); // explore use — no turn
+  logEvent(state, useCypher(state, idx));
 }
 
 function doExamine(state, cm, idx) {
-  if (cm.context === 'combat') { examineInCombat(state, idx); return; }
   openTray(state, examineSpec(state, idx), (a) => logEvent(state, applyExamine(state, idx, a)));
 }
 

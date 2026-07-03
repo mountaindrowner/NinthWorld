@@ -46,6 +46,7 @@ const guard = (fn) => (...a) => { if (ctx && ctx.state === 'running') { try { fn
 
 export const sfx = {
   step: guard(() => noise(0.08, 400, 'lowpass', 0.25)),
+  swing: guard(() => noise(0.12, 1400, 'bandpass', 0.3)),
   door: guard(() => { const o = ctx.createOscillator(); o.type = 'sawtooth'; o.frequency.setValueAtTime(120, now()); o.frequency.exponentialRampToValueAtTime(300, now() + 0.4); env(o, master, 0.02, 0.4, 0.3); o.start(); o.stop(now() + 0.45); }),
   dice: guard(() => { for (let i = 0; i < 4; i++) setTimeout(() => ctx && noise(0.04, 2000 + Math.random() * 1500, 'bandpass', 0.4), i * 60); }),
   hit: guard(() => { const o = ctx.createOscillator(); o.type = 'sine'; o.frequency.setValueAtTime(80, now()); o.frequency.exponentialRampToValueAtTime(40, now() + 0.15); env(o, master, 0.005, 0.15, 0.9); o.start(); o.stop(now() + 0.18); }),

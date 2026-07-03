@@ -17,9 +17,10 @@ import { BUF_W, BUF_H } from './screen.js';
 export const TOUCH_UI = {
   joy: { cx: 44, cy: BUF_H - 66, r: 26 },  // virtual stick base (visual)
   buttons: [
-    { id: 'interact', label: 'E', x: BUF_W - 56, y: BUF_H - 72, w: 52, h: 24 },
-    { id: 'KeyC', label: 'Cy', x: BUF_W - 56, y: BUF_H - 100, w: 52, h: 24 },
-    { id: 'Tab', label: 'Sheet', x: BUF_W - 56, y: BUF_H - 128, w: 52, h: 24 },
+    { id: 'swing', label: 'ATK', x: BUF_W - 56, y: BUF_H - 72, w: 52, h: 24 },
+    { id: 'interact', label: 'E', x: BUF_W - 56, y: BUF_H - 100, w: 52, h: 24 },
+    { id: 'KeyC', label: 'Cy', x: BUF_W - 56, y: BUF_H - 128, w: 52, h: 24 },
+    { id: 'Tab', label: 'Sheet', x: BUF_W - 56, y: BUF_H - 156, w: 52, h: 24 },
   ],
 };
 const JOY_PX = 46; // screen px from stick origin for full deflection
@@ -41,18 +42,23 @@ export function createInput(canvas) {
     _interact: false,             // edge: consumed by takeInteract()
     _clicks: [],                  // buffer-space {x,y}
     _keys: [],                    // buffer of pressed key codes for menus
+    _swings: [],                  // realtime melee: {heavy} per press (LMB / Space)
+    swingCharging: 0,             // >0 = mousedown timestamp (heavy charge underway)
     consumeYaw() { const y = this.yaw; this.yaw = 0; return y; },
     takeInteract() { const v = this._interact; this._interact = false; return v; },
     takeClick() { return this._clicks.shift() || null; },
     takeKey() { return this._keys.shift() || null; },
-    clearBuffered() { this._clicks.length = 0; this._keys.length = 0; this._interact = false; },
+    takeSwing() { return this._swings.shift() || null; },
+    clearBuffered() { this._clicks.length = 0; this._keys.length = 0; this._swings.length = 0; this._interact = false; },
   };
 
   window.addEventListener('keydown', (e) => {
     if (e.repeat) return;
     if (HELD[e.code]) { state[HELD[e.code]] = true; e.preventDefault(); return; }
     if (e.code === 'KeyE') { state._interact = true; state._keys.push(e.code); e.preventDefault(); return; }
-    if (e.code === 'Enter' || e.code === 'Space') { state._keys.push(e.code); e.preventDefault(); return; }
+    if (e.code === 'Space') { state._keys.push(e.code); state._swings.push({ heavy: false }); e.preventDefault(); return; }
+    if (e.code === 'Enter') { state._keys.push(e.code); e.preventDefault(); return; }
+    if (e.code === 'KeyF') { state._keys.push(e.code); return; }
     if (e.code === 'Escape') { state._keys.push('Escape'); return; }
     if (/^Digit[1-9]$/.test(e.code)) { state._keys.push(e.code); e.preventDefault(); return; }
     if (e.code === 'KeyR' || e.code === 'KeyC') { state._keys.push(e.code); return; }
@@ -62,6 +68,18 @@ export function createInput(canvas) {
 
   document.addEventListener('pointerlockchange', () => { state.locked = document.pointerLockElement === canvas; });
   document.addEventListener('mousemove', (e) => { if (state.locked) state.yaw += e.movementX; });
+
+  // pointer-locked mouse = the sword arm: tap to swing, hold ≥350ms for a heavy
+  // (Effort) swing released on mouseup — Morrowind's hold-attack, Cypher inside.
+  canvas.addEventListener('mousedown', (e) => {
+    if (state.locked && e.button === 0) state.swingCharging = performance.now();
+  });
+  canvas.addEventListener('mouseup', (e) => {
+    if (state.locked && e.button === 0 && state.swingCharging) {
+      state._swings.push({ heavy: performance.now() - state.swingCharging >= 350 });
+    }
+    state.swingCharging = 0;
+  });
 
   canvas.addEventListener('click', (e) => {
     if (state.wantPointerLock && !state.locked) { canvas.requestPointerLock?.(); return; }
@@ -74,7 +92,11 @@ export function createInput(canvas) {
   const inRect = (b, r) => b.x >= r.x && b.x <= r.x + r.w && b.y >= r.y && b.y <= r.y + r.h;
   const active = new Map(); // touch id -> {role, ox, oy, prevX}
 
-  const fireButton = (id) => { if (id === 'interact') state._interact = true; else state._keys.push(id); };
+  const fireButton = (id) => {
+    if (id === 'interact') state._interact = true;
+    else if (id === 'swing') state._swings.push({ heavy: false });
+    else state._keys.push(id);
+  };
 
   canvas.addEventListener('touchstart', (e) => {
     state.touchActive = true;

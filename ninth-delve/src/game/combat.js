@@ -1,335 +1,342 @@
-// combat.js — the turn-based encounter controller (Tech §6). Exploration freezes
-// into rounds; EVERY roll (initiative, attacks, defenses, flee) goes through the
-// dice tray so all math is visible (pillar #1). Enemy phase = the player rolling
-// Speed/Might defenses. Advancement is XP-from-discovery only; kills score nothing.
+// combat.js — REAL-TIME combat (the Morrowind pivot). No turn freeze, no modal
+// tray: you swing in first person and the Cypher math resolves in the background.
+// Every roll still surfaces honestly — as a line in the roll feed and a damage
+// popup — it just never interrupts. Hold the swing for a heavy attack: that IS
+// Effort (paid from Might, easing the roll), Cypher under Morrowind's skin.
 
 import { CREATURES, armorVs } from '../data/creatures.js';
 import { KAVE } from '../data/pregen_kave.js';
-import { logEvent, overLimit, requestWhisper, shake, flash } from './state.js';
-import { applyDamage, payCost, abilityCost, recover, isDead } from './player.js';
-import { tileDist, hasLOS } from './world.js';
-import { drainRandomCypher, useCypher, examineSpec, applyExamine } from './cyphers.js';
+import { logEvent, requestWhisper, shake, flash, feedLine, addPopup } from './state.js';
+import { applyDamage, payCost, abilityCost, effortCost, recover, isDead, isImpaired, isDebilitated } from './player.js';
+import { tileDist, hasLOS, blockedAt, cellAt } from './world.js';
 import { tableIntrusion } from './intrusions.js';
-import { openTray } from '../ui/dicetray.js';
 import { sfx } from '../engine/audio.js';
 import { PALETTE } from '../engine/texgen.js';
+import { resolveTask } from './dice.js';
+import { CELL } from '../data/map_whisperlock.js';
+import { overLimit } from './state.js';
 
-/** Briefly pose a creature billboard on an action frame (M7 lunge/hit juice). */
-function pose(state, ent, idx, ms = 220) { ent.frame = idx; ent.frameUntil = state.t + ms; }
+const SWING_MS = 550, HEAVY_MS = 800;      // attack cooldowns
+const REACH = 1.6;                          // melee reach in tiles
+const ARC = Math.PI / 3;                    // swing arc half-angle
+const LEASH = 7;                            // disengage beyond aggro + this
 
-const BANDS = ['immediate', 'short', 'long'];
-const bandFromTiles = (d) => (d <= 2 ? 'immediate' : d <= 10 ? 'short' : 'long');
-const bandRank = (b) => BANDS.indexOf(b);
-const closer = (b) => BANDS[Math.max(0, bandRank(b) - 1)];
-const farther = (b) => BANDS[Math.min(2, bandRank(b) + 1)];
+// per-creature realtime tuning: move speed (tiles/s), attack cooldown (ms), reach
+const RT = {
+  laak: { speed: 2.4, cd: 1200, reach: 1.0 },
+  hound: { speed: 3.0, cd: 1500, reach: 1.1 },
+  murden: { speed: 2.2, cd: 1800, reach: 1.1 },
+  abykos: { speed: 1.5, cd: 2200, reach: 1.3 },
+};
 
-const RETRIGGER_MS = 1500;
+const engagedCreatures = (state) => state.entities.filter((e) => e.kind === 'creature' && e.alive && !e.hidden && e.engaged);
+export const inCombat = (state) => engagedCreatures(state).length > 0;
 
-/** Check explore for an aggro'd, visible hostile and start an encounter. */
-export function maybeTrigger(state) {
-  if (state.t < (state.encounterCooldown || 0)) return;
+/** Intrusion odds: nat 1, or nat 1–2 while over the cypher limit (Rules §9). */
+const intrusionTriggered = (state, audit) =>
+  audit.natural === 1 || (overLimit(state) && audit.natural === 2);
+
+/** Feed-friendly die readout ("d20 14", or "auto" for difficulty-0 tasks). */
+const die = (audit) => (audit.auto ? 'auto' : `d20 ${audit.natural}`);
+
+// ---------------------------------------------------------------------------
+// player swing
+// ---------------------------------------------------------------------------
+
+/**
+ * Swing the broadsword. heavy = held attack → Effort 1 on the roll, paid from
+ * Might (Rules §2). Resolves vs every living creature inside reach + arc
+ * (usually one). All math goes to the roll feed; nothing blocks.
+ */
+export function playerSwing(state, heavy = false) {
   const p = state.player;
+  if (state.t < (p.swingCooldownUntil || 0) || isDebilitated(p) || isDead(p)) return;
+  p.swingCooldownUntil = state.t + (heavy ? HEAVY_MS : SWING_MS);
+  p.swingT0 = state.t; p.swingHeavy = heavy;   // viewmodel animation
+  sfx.swing?.();
+
+  // Effort on the heavy swing — costs Might, eases the roll. Free if broke.
+  let effortLevels = 0;
+  if (heavy) {
+    const cost = effortCost(1, { edge: p.edge.might, impaired: isImpaired(p) });
+    if (p.pools.might > cost && payCost(p, 'might', cost)) effortLevels = 1;
+    else feedLine(state, 'too drained for a heavy swing', PALETTE.rust);
+  }
+
+  const target = pickTarget(state);
+  if (!target) { feedLine(state, 'swing — nothing in reach', PALETTE.boneShadow); return; }
+
+  const def = CREATURES[target.creatureId];
+  const eases = [];
+  if (p.aggression) eases.push('Aggr');
+  if (state.t < (p.stimUntil || 0)) eases.push('Stim');
+  const audit = resolveTask({
+    base: def.level,
+    eases: eases.map((l) => ({ label: l, steps: 1 })),
+    effortLevels,
+    hinders: [],
+    rng: state.rng, impaired: isImpaired(p),
+  });
+
+  const tag = eases.length || effortLevels ? ` (${[...eases, ...(effortLevels ? ['Effort'] : [])].join('+')})` : '';
+  if (intrusionTriggered(state, audit)) {
+    feedLine(state, `atk ${def.name} — ${die(audit)} vs ${audit.target} · FUMBLE`, PALETTE.blood);
+    tableIntrusion(state, { creature: target.creatureId, zone: target.zone });
+    return;
+  }
+  if (!audit.success) {
+    feedLine(state, `atk ${def.name} — ${die(audit)} vs ${audit.target}${tag} · miss`, PALETTE.boneShadow);
+    addPopup(state, target.x, target.y, 'miss', PALETTE.boneShadow);
+    return;
+  }
+
+  // damage: weapon + bonuses + specials (auto-resolved, still reported)
+  let dmg = KAVE.weapons.broadsword.damage + p.weaponBonus;
+  let note = '';
+  const sp = audit.special;
+  if (sp.tier === '17' || sp.tier === '18') { dmg += sp.bonusDamage; note = ` +${sp.bonusDamage}!`; }
+  else if (sp.tier === '19') { dmg += 3; note = ' minor!'; knockback(state, target); }
+  else if (sp.tier === '20') { dmg += 4; note = ' MAJOR!'; target.stunUntil = state.t + 1800; }
+  const armor = armorVs(def, 'physical');
+  dmg = Math.max(0, dmg - armor);
+
+  target.hp -= dmg;
+  target.engaged = true;
+  poseFrame(state, target, def.special.includes('phase') ? 4 : 3, 260); // hit frame
+  sfx.hit(); shake(state, 1, 70);
+  addPopup(state, target.x, target.y, String(dmg), PALETTE.goldGlow);
+  feedLine(state, `atk ${def.name} — ${die(audit)} vs ${audit.target}${tag} · HIT ${dmg}${note}`, PALETTE.cyan);
+  if (target.hp <= 0) killCreature(state, target);
+}
+
+/** Nearest living creature inside reach and the frontal arc. */
+function pickTarget(state) {
+  const p = state.player;
+  let best = null, bestD = REACH;
   for (const e of state.entities) {
     if (e.kind !== 'creature' || !e.alive || e.hidden) continue;
     const d = tileDist(p.x, p.y, e.x, e.y);
-    if (d > e.aggro || !hasLOS(state, e.x, e.y, p.x, p.y)) continue;
-    // pull the whole group + anyone else visible & in aggro
-    const group = state.entities.filter((c) => c.kind === 'creature' && c.alive && !c.hidden
-      && (c.group === e.group || (tileDist(p.x, p.y, c.x, c.y) <= c.aggro && hasLOS(state, c.x, c.y, p.x, p.y))));
-    startEncounter(state, group);
-    return;
+    if (d > bestD) continue;
+    const ang = Math.atan2(e.y - p.y, e.x - p.x);
+    let da = ang - p.angle;
+    while (da > Math.PI) da -= 2 * Math.PI;
+    while (da < -Math.PI) da += 2 * Math.PI;
+    if (Math.abs(da) > ARC) continue;
+    best = e; bestD = d;
   }
+  return best;
 }
 
-export function startEncounter(state, creatureEntities) {
+function knockback(state, e) {
   const p = state.player;
-  const enemies = creatureEntities.map((ent) => {
-    const def = CREATURES[ent.creatureId];
-    ent.engaged = true;
-    return {
-      ent, def, id: def.id, name: def.name, level: def.level, target: def.target,
-      hp: ent.hp, maxHp: def.hp, damage: def.damage, moveBand: def.moveBand,
-      band: bandFromTiles(tileDist(p.x, p.y, ent.x, ent.y)), stunned: false, alive: true,
-    };
-  });
-  state.encounter = { enemies, round: 0, phase: 'init', playerFirst: true, seq: [], seqI: 0, queue: [] };
-  state.mode = 'ENCOUNTER';
-  p.defending = false;
-  logEvent(state, `Encounter — ${enemies.map((e) => e.name).join(', ')}.`);
-  if (enemies.some((e) => e.id === 'abykos')) requestWhisper(state, 'boss');
-
-  const maxLevel = Math.max(...enemies.map((e) => e.level));
-  openTray(state, { label: 'initiative (Speed)', base: maxLevel, eases: [], hinders: [], stat: 'speed' }, (a) => {
-    state.encounter.playerFirst = a.success;
-    logEvent(state, a.success ? 'You read the room — you act first.' : 'They move first.');
-    beginRound(state);
-  });
+  const ang = Math.atan2(e.y - p.y, e.x - p.x);
+  const nx = e.x + Math.cos(ang) * 1.2, ny = e.y + Math.sin(ang) * 1.2;
+  if (!creatureBlocked(state, e, nx, ny)) { e.x = nx; e.y = ny; }
 }
 
-function living(state) { return state.encounter.enemies.filter((e) => e.alive); }
-function livingLaaks(state) { return living(state).filter((e) => e.id === 'laak').length; }
-
-function beginRound(state) {
-  const e = state.encounter;
-  if (checkEnd(state)) return;
-  e.round += 1;
-  // Abykos Drain (§7): each round start, sap a random carried cypher's level.
-  const boss = e.enemies.find((en) => en.alive && en.id === 'abykos');
-  if (boss && state.player.cyphers.length) {
-    logEvent(state, 'The Abykos telegraphs: it drinks what you carry.');
-    sfx.drain();
-    drainRandomCypher(state, boss.surge ? 2 : 1);
-    boss.surge = false;
-  }
-  e.seq = e.playerFirst ? ['player', 'enemy'] : ['enemy', 'player'];
-  e.seqI = 0;
-  runPhase(state);
-}
-
-/** Intrusion fires on natural 1, or natural 1–2 while over the cypher limit (Rules §9). */
-const intrusionTriggered = (state, audit) =>
-  audit.special?.effect === 'intrusion' || (overLimit(state) && audit.natural === 2);
-
-function runPhase(state) {
-  const e = state.encounter;
-  if (!e || checkEnd(state)) return;
-  if (e.seqI >= e.seq.length) { beginRound(state); return; }
-  const ph = e.seq[e.seqI++];
-  if (ph === 'player') enterPlayerPhase(state);
-  else enterEnemyPhase(state);
-}
-
-function enterPlayerPhase(state) {
-  const e = state.encounter;
-  e.phase = 'player';
-  e.acted = false;
-  state.player.defending = false; // Defend eased the just-finished enemy phase
-}
-
-// --- player actions (called from the encounter menu) -------------------------
-
-const nearestEnemy = (state) => living(state).sort((a, b) => bandRank(a.band) - bandRank(b.band))[0];
-
-export function playerAction(state, id) {
-  const e = state.encounter;
-  if (!e || e.phase !== 'player' || e.acted) return;
-  const p = state.player;
-
-  if (id === 'aggression') { // stance toggle — does not consume the turn
-    if (!p.aggression) {
-      if (!payCost(p, 'might', abilityCost(KAVE.fightingMoves.aggression.cost.might, p.edge.might))) { logEvent(state, 'Not enough Might for Aggression.'); return; }
-      p.aggression = true; logEvent(state, 'Aggression: attacks eased, defenses hindered.');
-    } else { p.aggression = false; logEvent(state, 'You drop your aggressive stance.'); }
-    return;
-  }
-
-  if (id === 'defend') { p.defending = true; logEvent(state, 'You brace — defenses eased.'); consume(state); return; }
-  if (id === 'catch') { const r = recover(p, KAVE.recovery, state.rng); logEvent(state, `Catch Breath: +${r.points} (rest slot ${r.slot}).`); consume(state); return; }
-  if (id === 'fleet') { for (const en of living(state)) en.band = closer(en.band); logEvent(state, 'Fleet of Foot — you close the distance.'); consume(state); return; }
-  if (id === 'flee') { doFlee(state); return; }
-  if (id === 'attack') { doAttack(state); return; }
-  if (id === 'use' || id === 'examine') { state.cypherMenu = { context: 'combat', mode: id, ret: 'ENCOUNTER' }; state.mode = 'CYPHERS'; return; }
-}
-
-function consume(state) { state.encounter.acted = true; runPhase(state); }
-
-function doAttack(state) {
-  const p = state.player, enemy = nearestEnemy(state);
-  if (!enemy) return;
-  if (enemy.band === 'long') { logEvent(state, `${enemy.name} is too far — close first (Fleet of Foot).`); return; }
-  // Immediate move folds into the swing (Rules §3.2); broadsword reaches Short by
-  // stepping in — a no-cypher melee win against the repositioning boss stays possible.
-  const weapon = KAVE.weapons.broadsword;
-
-  const eases = [];
-  if (weapon.ease) eases.push({ label: 'light', steps: weapon.ease });
-  if (p.aggression) eases.push({ label: 'Aggression', steps: 1 });
-  if (p.stimRounds > 0) eases.push({ label: 'Stim', steps: 1 });
-
-  openTray(state, { label: `attack ${enemy.name} (${weapon.name})`, base: enemy.level, eases, hinders: [], stat: 'might' }, (a) => {
-    resolveAttack(state, enemy, weapon, a);
-    consume(state);
-  });
-}
-
-function resolveAttack(state, enemy, weapon, a) {
-  if (intrusionTriggered(state, a)) { logEvent(state, 'The GM smiles — a twist against you.'); return; } // full table M6
-  if (!a.success) { logEvent(state, `You miss the ${enemy.name}.`); return; }
-
-  let dmg = weapon.damage + state.player.weaponBonus;
-  const sp = a.special;
-  if (sp && (sp.tier === '17' || sp.tier === '18')) dmg += sp.bonusDamage;
-  if (a.specialChoice === 'damage') dmg += sp.bonusDamage;
-  else if (a.specialChoice === 'knockback') enemy.band = 'short';
-  else if (a.specialChoice === 'stun' || a.specialChoice === 'knockdown') enemy.stunned = true;
-
-  const armor = armorVs(enemy.def, 'physical');
-  dmg = Math.max(0, dmg - armor);
-  enemy.hp -= dmg;
-  sfx.hit(); shake(state, 1, 80); pose(state, enemy.ent, enemy.def.special.includes('phase') ? 4 : 3); // hit frame
-  logEvent(state, `You hit the ${enemy.name} for ${dmg}${armor ? ` (−${armor} Armor)` : ''}.`);
-  if (enemy.hp <= 0) killEnemy(state, enemy);
-}
-
-function killEnemy(state, enemy) {
-  enemy.alive = false; enemy.ent.alive = false; state.stats.kills += 1;
-  logEvent(state, `The ${enemy.name} falls.`);
+function killCreature(state, e) {
+  e.alive = false;
+  state.stats.kills += 1;
+  const def = CREATURES[e.creatureId];
+  feedLine(state, `the ${def.name} falls`, PALETTE.goldGlow);
+  logEvent(state, `The ${def.name} falls.`);
   if (state.stats.kills === 1) requestWhisper(state, 'kill');
-  if (enemy.ent.stolen) { // recover a snatched cypher from its body
-    state.entities.push({ uid: Date.now() + enemy.ent.uid, kind: 'pickup', ptype: 'cypher', sprite: 'pickup_cypher', x: enemy.ent.x, y: enemy.ent.y, cypher: enemy.ent.stolen });
-    enemy.ent.stolen = null;
+  if (e.stolen) { // murden drops what it snatched
+    state.entities.push({ uid: 9e6 + e.uid, kind: 'pickup', ptype: 'cypher', sprite: 'pickup_cypher', x: e.x, y: e.y, cypher: e.stolen });
+    e.stolen = null;
     logEvent(state, 'It drops what it stole.');
   }
 }
 
-function doFlee(state) {
-  const maxLevel = Math.max(...living(state).map((e) => e.level));
-  openTray(state, { label: 'flee (Speed)', base: maxLevel, eases: [], hinders: [], stat: 'speed' }, (a) => {
-    if (a.success) { logEvent(state, 'You break away into the dark.'); endEncounter(state, 'fled'); }
-    else { logEvent(state, 'You can’t break free!'); consume(state); }
-  });
-}
+// ---------------------------------------------------------------------------
+// creature AI + attacks (per frame)
+// ---------------------------------------------------------------------------
 
-// --- enemy phase = player defense rolls --------------------------------------
+/** Real-time creature update: aggro, chase, attack, leash. Call every frame. */
+export function updateCombat(state, dt) {
+  const p = state.player;
+  if (isDead(p)) return;
 
-function enterEnemyPhase(state) {
-  const e = state.encounter;
-  e.phase = 'enemy';
-  e.queue = living(state).slice();
-  processEnemy(state);
-}
+  for (const e of state.entities) {
+    if (e.kind !== 'creature' || !e.alive || e.hidden) continue;
+    const def = CREATURES[e.creatureId];
+    const rt = RT[e.creatureId] || RT.laak;
+    const d = tileDist(p.x, p.y, e.x, e.y);
 
-function processEnemy(state) {
-  const e = state.encounter;
-  if (!e || checkEnd(state)) return;
-  if (e.queue.length === 0) { runPhase(state); return; } // enemy phase done
-  const enemy = e.queue.shift();
-  if (!enemy.alive) { processEnemy(state); return; }
-  if (enemy.stunned) { enemy.stunned = false; logEvent(state, `The ${enemy.name} is reeling.`); processEnemy(state); return; }
-  if (enemy.band !== 'immediate' && !(enemy.moveBand === 'short' && enemy.band === 'short')) {
-    enemy.band = closer(enemy.band);
-    if (enemy.band !== 'immediate') { logEvent(state, `The ${enemy.name} closes.`); processEnemy(state); return; }
+    // engage / leash
+    if (!e.engaged) {
+      if (d <= e.aggro && hasLOS(state, e.x, e.y, p.x, p.y)) {
+        e.engaged = true;
+        if (e.creatureId === 'abykos') { requestWhisper(state, 'boss'); e.nextDrain = state.t + 4000; }
+        feedLine(state, `the ${def.name} has noticed you`, PALETTE.rust);
+      } else {
+        // drift home
+        const hd = tileDist(e.x, e.y, e.home.x, e.home.y);
+        if (hd > 0.4) stepToward(state, e, e.home.x, e.home.y, rt.speed * 0.5 * dt);
+        continue;
+      }
+    }
+    if (e.engaged && d > e.aggro + LEASH) { e.engaged = false; continue; }
+    if (state.t < (e.stunUntil || 0)) continue;
+
+    // Abykos: the Drain on a timer while engaged; repositions if you hug it
+    if (e.creatureId === 'abykos') {
+      if (state.t >= (e.nextDrain || 0) && p.cyphers.length) {
+        sfx.drain();
+        drainTick(state);
+        e.nextDrain = state.t + 9000;
+      }
+      if (d < 1.0) {
+        e.hugTime = (e.hugTime || 0) + dt * 1000;
+        if (e.hugTime > 2200) { e.hugTime = 0; blinkAway(state, e); }
+      } else e.hugTime = 0;
+    }
+
+    // chase (hound phases through S walls — its den telegraphs the vault trick)
+    if (d > rt.reach * 0.85) {
+      stepToward(state, e, p.x, p.y, rt.speed * dt, e.creatureId === 'hound');
+    }
+
+    // attack when in reach and off cooldown
+    if (d <= rt.reach && state.t >= (e.nextAttack || 0) && hasLOS(state, e.x, e.y, p.x, p.y)) {
+      e.nextAttack = state.t + rt.cd;
+      poseFrame(state, e, 2, 300); // lunge
+      enemyStrike(state, e, def);
+    }
   }
-  enemyAttack(state, enemy);
+
+  if (isDead(p)) { state.reportReason = 'defeat'; state.mode = 'REPORT'; logEvent(state, 'You fall in the dark.'); }
 }
 
-function enemyAttack(state, enemy) {
+/** One enemy attack = one background player defense roll (you still roll everything). */
+function enemyStrike(state, e, def) {
   const p = state.player;
-  const touch = enemy.def.special.includes('might_touch');
+  const touch = def.special.includes('might_touch');
   const stat = touch ? 'might' : 'speed';
+
   const eases = [];
-  if (!touch) eases.push({ label: 'shield', steps: 1 });          // shield = Speed asset
-  if (p.defending) eases.push({ label: 'Defend', steps: 1 });
+  if (!touch) eases.push({ label: 'shield', steps: 1 });
   if (touch && KAVE.skills.mightDefense === 'trained') eases.push({ label: 'trained', steps: 1 });
+  if (state.t < (p.stimUntil || 0)) eases.push({ label: 'Stim', steps: 1 });
   const hinders = [];
-  if (p.aggression) hinders.push({ label: 'Aggression', steps: 1 });
-  if (enemy.id === 'laak' && livingLaaks(state) >= 2) hinders.push({ label: 'skitter', steps: 1 });
-  if (p.nextDefenseHinder) { hinders.push({ label: 'phased behind', steps: 1 }); p.nextDefenseHinder = false; }
+  if (p.aggression) hinders.push({ label: 'Aggr', steps: 1 });
+  if (p.nextDefenseHinder) { hinders.push({ label: 'phased', steps: 1 }); p.nextDefenseHinder = false; }
+  const laaksNear = state.entities.filter((c) => c.kind === 'creature' && c.alive && c.creatureId === 'laak' && tileDist(p.x, p.y, c.x, c.y) < 4).length;
+  if (e.creatureId === 'laak' && laaksNear >= 2) hinders.push({ label: 'skitter', steps: 1 });
 
-  pose(state, enemy.ent, 2, 400); // lunge toward the player
-  openTray(state, { label: `defend vs ${enemy.name} (${stat})`, base: enemy.level, eases, hinders, stat }, (a) => {
-    resolveDefense(state, enemy, a);
-    if (enemy.def.special.includes('reposition') && enemy.alive) enemy.band = 'short'; // Abykos phases away
-    processEnemy(state);
-  });
-}
+  const audit = resolveTask({ base: def.level, eases, hinders, rng: state.rng, impaired: isImpaired(p) });
 
-function resolveDefense(state, enemy, a) {
-  const p = state.player;
-  if (a.success) {
-    if (a.special?.effect) { enemy.stunned = true; logEvent(state, `You turn the ${enemy.name}’s attack against it.`); }
-    else logEvent(state, `You evade the ${enemy.name}.`);
+  if (audit.success) {
+    feedLine(state, `def ${def.name} — ${die(audit)} vs ${audit.target} · evaded`, PALETTE.cyan);
+    if (audit.special.tier === '20') { e.stunUntil = state.t + 1500; feedLine(state, `you turn it aside — the ${def.name} reels`, PALETTE.goldGlow); }
     return;
   }
-  // failed defense → take the hit (phase-lunge ignores Armor — Appendix REQUIRED)
-  const ignoresArmor = enemy.def.special.includes('phase_lunge');
+
+  // hit taken — phase-lunge ignores Armor (Appendix REQUIRED)
+  const ignoresArmor = def.special.includes('phase_lunge');
   const armor = ignoresArmor ? 0 : Math.max(0, p.armor - p.armorPenalty);
-  const dmg = Math.max(0, enemy.damage - armor);
+  const dmg = Math.max(0, def.damage - armor);
   applyDamage(p, dmg);
   sfx.hurt(); shake(state, 2, 130); flash(state, PALETTE.blood, 150);
-  logEvent(state, `The ${enemy.name} hits you for ${dmg}${ignoresArmor ? ' (through Armor)' : ''}.`);
-  if (intrusionTriggered(state, a)) creatureIntrusion(state, enemy);
+  feedLine(state, `def ${def.name} — ${die(audit)} vs ${audit.target} · HIT for ${dmg}${ignoresArmor ? ' (thru Armor)' : ''}`, PALETTE.blood);
+
+  if (intrusionTriggered(state, audit)) creatureIntrusion(state, e, def);
 }
 
-/** Creature intrusions on a failed/nat-1 defense (M5 roster; full economy M6). */
-function creatureIntrusion(state, enemy) {
+/** Creature intrusions on a fumbled defense (nat 1 / over-limit 1–2). */
+function creatureIntrusion(state, e, def) {
   const p = state.player;
-  if (enemy.id === 'murden' && p.cyphers.length) {
+  if (e.creatureId === 'murden' && p.cyphers.length) {
     const i = Math.floor(state.rng() * p.cyphers.length);
-    enemy.stolen = p.cyphers.splice(i, 1)[0];
-    enemy.ent.stolen = enemy.stolen;    // recover it from its body/nest
-    enemy.alive = false;                // snatch-and-flee: leaves the fight
-    logEvent(state, `The murden snatches your ${enemy.stolen.identified ? enemy.stolen.trueName : 'cypher'} and bolts!`);
-  } else if (enemy.id === 'hound') {
+    e.stolen = p.cyphers.splice(i, 1)[0];
+    e.engaged = false; // snatch-and-flee: it bolts for home with your cypher
+    feedLine(state, `the murden SNATCHES your ${e.stolen.identified ? e.stolen.trueName : 'cypher'} and bolts!`, PALETTE.rust);
+  } else if (e.creatureId === 'hound') {
     p.nextDefenseHinder = true;
-    logEvent(state, 'The hound phases behind you — your next defense is hindered.');
-  } else if (enemy.id === 'abykos') {
-    applyDamage(p, 2); // touch drains a flat 2 Might on a nat-1 defense
-    logEvent(state, 'Static crawls up the armor straps — 2 Might drained.');
+    feedLine(state, 'the hound phases behind you — next defense hindered', PALETTE.rust);
+  } else if (e.creatureId === 'abykos') {
+    applyDamage(p, 2);
+    feedLine(state, 'static crawls the armor straps — 2 Might drained', PALETTE.rust);
   } else {
-    tableIntrusion(state, { creature: enemy.id, zone: enemy.zone }); // e.g. laak latch
+    tableIntrusion(state, { creature: e.creatureId, zone: e.zone });
   }
 }
 
-// --- cypher actions in combat (consume the turn) ------------------------------
-
-export function useCypherInCombat(state, idx) {
-  const summary = useCypher(state, idx, state.encounter);
-  logEvent(state, summary);
-  consume(state);
+function drainTick(state) {
+  // avoid a circular import: cyphers.js also imports from here? (it doesn't — safe)
+  const p = state.player;
+  if (!p.cyphers.length) return;
+  const i = Math.floor(state.rng() * p.cyphers.length);
+  const cy = p.cyphers[i];
+  cy.level -= 1;
+  if (cy.level <= 0) {
+    p.cyphers.splice(i, 1);
+    feedLine(state, `the Abykos drinks your ${cy.identified ? cy.trueName : 'cypher'} to NOTHING`, PALETTE.rust);
+  } else {
+    feedLine(state, 'it drinks what you carry — a cypher weakens', PALETTE.rust);
+  }
 }
 
-export function examineInCombat(state, idx) {
-  openTray(state, examineSpec(state, idx), (a) => {
-    logEvent(state, applyExamine(state, idx, a));
-    consume(state);
-  });
+function blinkAway(state, e) {
+  // phase across the room: try a few spots ~4 tiles out
+  for (let i = 0; i < 8; i++) {
+    const a = state.rng() * Math.PI * 2;
+    const nx = e.x + Math.cos(a) * 4, ny = e.y + Math.sin(a) * 4;
+    if (!creatureBlocked(state, e, nx, ny)) {
+      e.x = nx; e.y = ny;
+      poseFrame(state, e, 2, 300);
+      feedLine(state, 'the Abykos phases across the room', PALETTE.mauve);
+      return;
+    }
+  }
 }
 
-// --- end conditions ----------------------------------------------------------
-
-function checkEnd(state) {
-  const e = state.encounter;
-  if (!e) return true;
-  if (isDead(state.player)) { defeat(state); return true; }
-  if (living(state).length === 0) { victory(state); return true; }
+// simple slide movement for creatures (hound may pass secret/phase walls)
+function creatureBlocked(state, e, x, y, ghostly = false) {
+  const r = 0.28;
+  for (const [ox, oy] of [[-r, -r], [r, -r], [-r, r], [r, r]]) {
+    const cx = Math.floor(x + ox), cy = Math.floor(y + oy);
+    if (ghostly && cellAt(cx, cy) === CELL.SECRET) continue; // hound den phasing
+    if (blockedAt(state, cx, cy)) return true;
+  }
   return false;
 }
 
-function victory(state) {
-  logEvent(state, 'The way is clear.');
-  endEncounter(state, 'victory');
+function stepToward(state, e, tx, ty, step, ghostly = false) {
+  const ang = Math.atan2(ty - e.y, tx - e.x);
+  const dx = Math.cos(ang) * step, dy = Math.sin(ang) * step;
+  if (!creatureBlocked(state, e, e.x + dx, e.y, ghostly)) e.x += dx;
+  if (!creatureBlocked(state, e, e.x, e.y + dy, ghostly)) e.y += dy;
 }
 
-function defeat(state) {
-  logEvent(state, 'You fall in the dark.');
-  state.encounter = null;
-  state.mode = 'REPORT';
-  state.reportReason = 'defeat';
-}
+function poseFrame(state, ent, idx, ms = 220) { ent.frame = idx; ent.frameUntil = state.t + ms; }
 
-function endEncounter(state, reason) {
-  for (const e of state.encounter?.enemies || []) e.ent.engaged = false;
-  state.encounter = null;
-  state.mode = 'EXPLORE';
-  state.encounterCooldown = state.t + RETRIGGER_MS; // brief re-aggro grace
-}
+// ---------------------------------------------------------------------------
+// rest + stance (explore verbs that used to be combat menu actions)
+// ---------------------------------------------------------------------------
 
-/** Actions available this turn (for the menu). */
-export function availableActions(state) {
-  const e = state.encounter;
-  if (!e || e.phase !== 'player') return [];
-  const near = nearestEnemy(state);
-  const canAttack = near && near.band !== 'long';
+/** R: rest — a recovery roll from the daily sequence. Not while hunted. */
+export function tryRest(state) {
   const p = state.player;
-  return [
-    { id: 'attack', label: canAttack ? 'Attack' : 'Attack (far)', disabled: !canAttack },
-    { id: 'fleet', label: 'Fleet of Foot' },
-    { id: 'aggression', label: p.aggression ? 'Aggression ✓' : 'Aggression' },
-    { id: 'use', label: 'Use cypher', disabled: p.cyphers.length === 0 },
-    { id: 'examine', label: 'Examine', disabled: !p.cyphers.some((c) => !c.identified) },
-    { id: 'catch', label: 'Catch Breath' },
-    { id: 'defend', label: 'Defend' },
-    { id: 'flee', label: 'Flee' },
-  ];
+  if (inCombat(state)) { feedLine(state, 'no rest — something hunts you', PALETTE.rust); return; }
+  if (p.restsUsed >= 3) { feedLine(state, 'no rest slots left before a long sleep', PALETTE.rust); return; }
+  const r = recover(p, KAVE.recovery, state.rng);
+  p.armorPenalty = 0; // a strapped-down rest re-cinches the armor
+  feedLine(state, `rest (${KAVE.restSequence[p.restsUsed - 1] || ''}) — recovered ${r.points}`, PALETTE.cyan);
+  logEvent(state, `You rest. +${r.points} points.`);
+}
+
+/** F: toggle Aggression stance (2 Might −Edge; eases attacks, hinders defenses). */
+export function toggleAggression(state) {
+  const p = state.player;
+  if (!p.aggression) {
+    if (!payCost(p, 'might', abilityCost(KAVE.fightingMoves.aggression.cost.might, p.edge.might))) {
+      feedLine(state, 'not enough Might for Aggression', PALETTE.rust); return;
+    }
+    p.aggression = true;
+    feedLine(state, 'AGGRESSION — attacks eased, defenses hindered', PALETTE.gold);
+  } else {
+    p.aggression = false;
+    feedLine(state, 'you drop the aggressive stance', PALETTE.boneShadow);
+  }
 }

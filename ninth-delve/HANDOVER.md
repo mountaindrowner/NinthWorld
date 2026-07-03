@@ -411,3 +411,50 @@ Verified: suite PASS, no errors; 16:9 window fills nearly edge-to-edge; ticker
 text over a bright sprite and whisper text over walls both readable.
 Doc note: Tech §3 / GDD pillar #4 say "320×200" — deliberately superseded by
 user request; the integer-upscale + pixelated pipeline is unchanged.
+
+## 2026-07-03 — DESIGN PIVOT: real-time combat ("love letter to Morrowind")
+User directive: the game is a love letter to *Morrowind* — look/depth/immersion.
+The turn-based tabletop encounter mode is retired; combat is now real-time with
+the Cypher math rolling in the background (which is precisely how Morrowind
+itself works: real-time swings, hidden dice). Our twist: the dice stay honest —
+a fading **roll feed** (top-left message log) reports every roll (`atk murden —
+d20 13 vs 9 · HIT 5`), so pillar #1's *visibility* survives even though the
+*interruption* is gone.
+
+Done (rewrote `game/combat.js`; touched cyphers/state/input/menus/raycaster/main):
+- **Swing**: LMB tap = light swing (0.55s cd); **hold ≥350ms = heavy swing** —
+  that IS Effort 1, paid from Might w/ Edge (Rules §2), easing the roll. Space
+  also swings; touch gets an ATK button. First-person procedural broadsword
+  viewmodel (idle sway, charge pull-back, cut arc).
+- **Creature AI**: per-frame aggro (LOS+range) → chase (per-creature speed) →
+  strike on cooldown → leash home. Enemy strikes = background player defense
+  rolls (shield/trained/Stim eases; Aggression/skitter/phased hinders). Failed
+  defense = damage − Armor (phase-lunge still ignores Armor), hurt flash/shake.
+- **Specials auto-resolve, still reported**: 17/18 +dmg, 19 minor = +3 & knockback,
+  20 major = +4 & stun. Nat 1 (or 1–2 over cypher limit) = fumble → intrusion.
+- **Roster in real time**: murden snatch-and-flee on your fumbled defense (drops
+  it on death); hound phases through den S-walls while chasing + phase-behind
+  hinder; Abykos drains a cypher level every ~9s while engaged, blinks across
+  the room if hugged, Might-defense touch.
+- **Verbs remapped**: R = rest (recovery roll, blocked while hunted, clears the
+  strap penalty) · F = Aggression stance toggle · C = cyphers (menus pause the
+  world, Morrowind-style) · Detonation now throws at the nearest visible creature
+  (2-tile blast); Stim = 15 s of eased actions (was 3 rounds).
+- **Readability**: world-anchored damage popups (rise/fade, z-buffer clipped),
+  health bars over hurt creatures, feed lines show "auto" for difficulty-0 rolls.
+- The dice tray SURVIVES for deliberate stop-and-roll moments only: examine,
+  chasm climb, glyph intuit. Initiative/range bands/turn engine deleted.
+
+Doc impact (append-only note, docs not rewritten): supersedes Rules §3 combat
+structure, Tech §6 turn engine, and the M4 acceptance framing. GDD pillar #1 is
+reinterpreted: "every roll visible" = the roll feed; "player rolls everything"
+still true mechanically (every resolution is a player-side resolveTask).
+
+Verified headless (seeds 4/9): suite PASS (dice/roster tables updated to the new
+API) · laak duel: aggro → background defense → swing HIT 6 → falls · murden duel:
+murden died AND hurt the player back · boss: drain tick fired at +4s (cypher 3→2,
+feed line), no errors anywhere. Screenshot shows feed + viewmodel + HUD.
+
+Next: human playtest the feel (swing pacing, enemy speeds, drain cadence are all
+first-guess numbers in combat.js RT table). Then the "beautiful look" half of the
+Morrowind letter: textured floors/ceilings, better wall variety, lighting.

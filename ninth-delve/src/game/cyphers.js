@@ -1,14 +1,15 @@
 // cyphers.js — identify + USE resolution (Rules §9, Dungeon §6). Cyphers are
-// one-use; using or examining is one action. Effects that only matter in combat
-// take an optional encounter context. Numenera is used unidentified or examined
-// (a hindered Intellect task) first — the Glaive's inability is the whole point.
+// one-use. Combat effects resolve in real time against world entities (the
+// Morrowind pivot). Numenera is used unidentified or examined (a hindered
+// Intellect task) first — the Glaive's inability is the whole point.
 
 import { KAVE } from '../data/pregen_kave.js';
 import { rollRecovery } from './dice.js';
-import { applyRecovery, restorePool } from './player.js';
-import { armorVs } from '../data/creatures.js';
-import { logEvent } from './state.js';
-import { phaseFront } from './world.js';
+import { applyRecovery } from './player.js';
+import { armorVs, CREATURES } from '../data/creatures.js';
+import { logEvent, addPopup } from './state.js';
+import { phaseFront, tileDist, hasLOS } from './world.js';
+import { PALETTE } from '../engine/texgen.js';
 
 /** Remove a cypher from inventory by index and count it as used. */
 function consumeCypher(state, idx) {
@@ -18,10 +19,10 @@ function consumeCypher(state, idx) {
 }
 
 /**
- * Use the cypher at inventory index `idx`. `combat` (optional) = the encounter,
- * so target/AoE effects can resolve. @returns {string} a summary for the modal.
+ * Use the cypher at inventory index `idx`. Combat effects (Detonation) resolve
+ * immediately against nearby world creatures. @returns {string} summary text.
  */
-export function useCypher(state, idx, combat) {
+export function useCypher(state, idx) {
   const p = state.player;
   const cy = p.cyphers[idx];
   if (!cy) return '';
@@ -40,8 +41,8 @@ export function useCypher(state, idx, combat) {
       return 'Density Nodule: your weapon does +2 damage for the rest of the delve.';
     case 'stim':
       consumeCypher(state, idx);
-      p.stimRounds = 3;
-      return 'Stim Burst: all your actions are eased for 3 rounds.';
+      p.stimUntil = state.t + 15000;
+      return 'Stim Burst: all your actions are eased while it sings (15s).';
     case 'gravity':
       consumeCypher(state, idx);
       p.crossing = true;
@@ -54,18 +55,25 @@ export function useCypher(state, idx, combat) {
     }
     case 'detonation': {
       const level = cy.level;
+      // thrown at the nearest visible creature within Short (10 tiles); the
+      // blast catches everything within 2 tiles of it. Energy — Abykos Armor 0.
+      const p2 = state.player;
+      const targets = state.entities.filter((e) => e.kind === 'creature' && e.alive && !e.hidden
+        && tileDist(p2.x, p2.y, e.x, e.y) <= 10 && hasLOS(state, p2.x, p2.y, e.x, e.y));
+      if (!targets.length) return 'Detonation: no target in sight — keep it for a fight.';
       consumeCypher(state, idx);
-      if (!combat) return 'Detonation: it needs a target — throw it in a fight.';
-      const target = combat.enemies.filter((e) => e.alive).sort((a, b) => a.band.localeCompare(b.band))[0];
-      if (!target) return 'Detonation: no target.';
+      const target = targets.sort((a, b) => tileDist(p2.x, p2.y, a.x, a.y) - tileDist(p2.x, p2.y, b.x, b.y))[0];
       const dmg = level + 4;
       let hits = 0;
-      for (const e of combat.enemies) {
-        if (!e.alive || e.band !== target.band) continue; // all in the target's Immediate
-        const armor = Math.max(0, armorVs(e.def, 'energy') - 1); // ignores 1 Armor
-        e.hp -= Math.max(0, dmg - armor);
-        hits += 1;
-        if (e.hp <= 0) { e.alive = false; e.ent.alive = false; state.stats.kills += 1; }
+      for (const e of state.entities) {
+        if (e.kind !== 'creature' || !e.alive || e.hidden) continue;
+        if (tileDist(target.x, target.y, e.x, e.y) > 2) continue;
+        const def = CREATURES[e.creatureId];
+        const armor = Math.max(0, armorVs(def, 'energy') - 1); // ignores 1 Armor
+        const dealt = Math.max(0, dmg - armor);
+        e.hp -= dealt; e.engaged = true; hits += 1;
+        addPopup(state, e.x, e.y, String(dealt), PALETTE.goldGlow);
+        if (e.hp <= 0) { e.alive = false; state.stats.kills += 1; }
       }
       return `Detonation: ${dmg} energy damage to ${hits} foe(s) in the blast.`;
     }
@@ -79,8 +87,10 @@ export function useCypher(state, idx, combat) {
 export function examineSpec(state, idx) {
   const cy = state.player.cyphers[idx];
   const hinders = [{ label: 'numenera inability', steps: 1 }];
-  // murden telepathic static hinders Intellect while one is within Short
-  if (state.encounter && state.encounter.enemies.some((e) => e.alive && e.id === 'murden' && e.band !== 'long')) {
+  // murden telepathic static hinders Intellect while one is near (Short ≈ 10 tiles)
+  const p = state.player;
+  if (state.entities.some((e) => e.kind === 'creature' && e.alive && !e.hidden
+    && e.creatureId === 'murden' && tileDist(p.x, p.y, e.x, e.y) <= 10)) {
     hinders.push({ label: 'murden static', steps: 1 });
   }
   return { label: `examine: ${cy.unidName}`, base: cy.level, eases: [], hinders, stat: 'intellect' };
