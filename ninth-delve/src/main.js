@@ -20,6 +20,7 @@ import { drawHud } from './ui/hud.js';
 import { drawModal, drawSheet, drawEncounterMenu, drawCypherMenu, drawGlyphPuzzle } from './ui/menus.js';
 import { openTray, updateTray, drawTray } from './ui/dicetray.js';
 import { drawReport } from './ui/report.js';
+import { drawTouchControls } from './ui/touch.js';
 import { KAVE } from './data/pregen_kave.js';
 
 const BUF_W = 320, BUF_H = 200;
@@ -105,8 +106,9 @@ function updateExplore(dt) {
   p.angle += turn + input.consumeYaw() * MOUSE_SENS;
 
   const dirX = Math.cos(p.angle), dirY = Math.sin(p.angle);
-  const mvF = (input.forward ? 1 : 0) - (input.back ? 1 : 0);
-  const mvS = (input.strafeR ? 1 : 0) - (input.strafeL ? 1 : 0);
+  // analog stick (touch) or WASD (keyboard)
+  const mvF = input.touchActive ? -input.analogY : (input.forward ? 1 : 0) - (input.back ? 1 : 0);
+  const mvS = input.touchActive ? input.analogX : (input.strafeR ? 1 : 0) - (input.strafeL ? 1 : 0);
   const dx = dirX * mvF * MOVE_FWD * dt + (-dirY) * mvS * MOVE_STRAFE * dt;
   const dy = dirY * mvF * MOVE_FWD * dt + (dirX) * mvS * MOVE_STRAFE * dt;
   if (dx || dy) moveWithCollision(state, p, dx, dy);
@@ -195,6 +197,7 @@ function loop(now) {
   renderView(buf, state, assets);
   if (state.mode === 'EXPLORE') drawCrosshair();
   drawHud(buf, state, assets);
+  if (state.mode === 'EXPLORE' && input.touchActive) drawTouchControls(buf, input);
 
   if (modeAtStart === 'MODAL' && state.mode === 'MODAL') {
     if (drawModal(buf, state, clicks, keys)) {

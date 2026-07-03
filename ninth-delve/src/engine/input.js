@@ -9,6 +9,18 @@ const HELD = {
   KeyQ: 'turnL', ArrowLeft: 'turnL', ArrowRight: 'turnR',
 };
 
+// Touch layout in 320×200 buffer coords (shared with ui/touch.js for drawing).
+// Left half is the move stick; the right half (minus these buttons) is look-drag.
+export const TOUCH_UI = {
+  joy: { cx: 44, cy: 150, r: 26 },        // virtual stick base (visual)
+  buttons: [
+    { id: 'interact', label: 'E', x: 264, y: 128, w: 52, h: 24 },
+    { id: 'KeyC', label: 'Cy', x: 264, y: 100, w: 52, h: 24 },
+    { id: 'Tab', label: 'Sheet', x: 264, y: 72, w: 52, h: 24 },
+  ],
+};
+const JOY_PX = 46; // screen px from stick origin for full deflection
+
 /**
  * @param {HTMLCanvasElement} canvas
  * @returns {Object} polled input state + edge-trigger consumers
@@ -20,6 +32,9 @@ export function createInput(canvas) {
     yaw: 0, locked: false,
     wantPointerLock: false,       // main sets true only in EXPLORE
     viewport: { scale: 1, offX: 0, offY: 0 },
+    touchActive: false,           // true once a touch is seen → analog move + on-screen UI
+    analogX: 0, analogY: 0,       // virtual-stick vector (−1..1)
+    knob: { x: 0, y: 0 },         // stick knob offset (buffer px) for drawing
     _interact: false,             // edge: consumed by takeInteract()
     _clicks: [],                  // buffer-space {x,y}
     _keys: [],                    // buffer of pressed key codes for menus
@@ -50,6 +65,52 @@ export function createInput(canvas) {
     const { scale, offX, offY } = state.viewport;
     state._clicks.push({ x: (e.clientX - offX) / scale, y: (e.clientY - offY) / scale });
   });
+
+  // --- touch: left stick = move, right drag = look, tap = click in menus -----
+  const toBuffer = (t) => { const { scale, offX, offY } = state.viewport; return { x: (t.clientX - offX) / scale, y: (t.clientY - offY) / scale }; };
+  const inRect = (b, r) => b.x >= r.x && b.x <= r.x + r.w && b.y >= r.y && b.y <= r.y + r.h;
+  const active = new Map(); // touch id -> {role, ox, oy, prevX}
+
+  const fireButton = (id) => { if (id === 'interact') state._interact = true; else state._keys.push(id); };
+
+  canvas.addEventListener('touchstart', (e) => {
+    state.touchActive = true;
+    for (const t of e.changedTouches) {
+      const b = toBuffer(t);
+      if (!state.wantPointerLock) { state._clicks.push(b); active.set(t.identifier, { role: 'tap' }); continue; }
+      const btn = TOUCH_UI.buttons.find((r) => inRect(b, r));
+      if (btn) { fireButton(btn.id); active.set(t.identifier, { role: 'button' }); continue; }
+      if (b.x < 160) { active.set(t.identifier, { role: 'move', ox: t.clientX, oy: t.clientY }); }
+      else { active.set(t.identifier, { role: 'look', prevX: t.clientX }); }
+    }
+    e.preventDefault();
+  }, { passive: false });
+
+  canvas.addEventListener('touchmove', (e) => {
+    for (const t of e.changedTouches) {
+      const a = active.get(t.identifier);
+      if (!a) continue;
+      if (a.role === 'move') {
+        state.analogX = Math.max(-1, Math.min(1, (t.clientX - a.ox) / JOY_PX));
+        state.analogY = Math.max(-1, Math.min(1, (t.clientY - a.oy) / JOY_PX));
+        state.knob = { x: state.analogX * TOUCH_UI.joy.r, y: state.analogY * TOUCH_UI.joy.r };
+      } else if (a.role === 'look') {
+        state.yaw += (t.clientX - a.prevX); a.prevX = t.clientX;
+      }
+    }
+    e.preventDefault();
+  }, { passive: false });
+
+  const endTouch = (e) => {
+    for (const t of e.changedTouches) {
+      const a = active.get(t.identifier);
+      if (a && a.role === 'move') { state.analogX = 0; state.analogY = 0; state.knob = { x: 0, y: 0 }; }
+      active.delete(t.identifier);
+    }
+    e.preventDefault();
+  };
+  canvas.addEventListener('touchend', endTouch, { passive: false });
+  canvas.addEventListener('touchcancel', endTouch, { passive: false });
 
   return state;
 }

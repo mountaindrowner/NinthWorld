@@ -375,6 +375,24 @@ a playable end-to-end slice: title → explore (raycaster, pickups, doors, secre
 puzzle, chasm) → visible-dice Cypher combat vs the full roster + boss → Key →
 exit / death → Delve Report. `?test=1` green (connectivity, assets, dice, roster).
 
-Next (post-slice / Stretch only): art PNG drop-in, touch controls, textured
-floors, save via localStorage (GH Pages), balance fine-tuning from real human
-playtests, reskin creature names before any public build (README).
+Next (post-slice / Stretch only): art PNG drop-in, textured floors, save via
+localStorage (GH Pages), balance fine-tuning from real human playtests, reskin
+creature names before any public build (README).
+
+## 2026-07-02 — Stretch: touch controls
+Done (user-requested Stretch item; Tech §7 "virtual stick + tap menus"):
+- `engine/input.js`: touch layer. Left half = virtual move stick (analog
+  `analogX/analogY`, −1..1); right half drag = look (feeds the same `yaw` as the
+  mouse); on-screen E / Cyphers / Sheet buttons (`TOUCH_UI`, buffer coords).
+  In non-EXPLORE modes a tap becomes a buffer click, so menus/tray/combat/report
+  are already touch-usable. `touchActive` latches on first touch.
+- `ui/touch.js`: draws the stick base + knob and the three buttons (EXPLORE only).
+- `main.js`: movement uses the analog stick when `touchActive`, else WASD; draws
+  the overlay in EXPLORE.
+- Desktop keyboard/mouse untouched; the two schemes coexist (tap title to start
+  also works).
+Verified (headless, `hasTouch` mobile context, synthetic TouchEvents): tap-start
+→ EXPLORE; stick-up walked north (y 22.5→20.5); right-drag turned (angle changed);
+E button collected a cypher (→ pickup modal); suite still PASS; no errors.
+Note: pointer-lock isn't used on touch (we preventDefault touches, so no synthetic
+click/lock); look is raw drag-delta yaw. No pitch (engine is yaw-only by design).
