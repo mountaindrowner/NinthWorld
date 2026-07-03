@@ -1,0 +1,284 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Ninth Delve — Babylon Room Sample</title>
+  <style>
+    * { margin: 0; padding: 0; }
+    html, body { width: 100%; height: 100%; background: #0A0A12; overflow: hidden; }
+    #c { width: 100%; height: 100%; display: block; image-rendering: pixelated; outline: none; }
+    #hud {
+      position: fixed; left: 12px; top: 10px; color: #D9CBB3; font: 13px monospace;
+      text-shadow: 1px 1px 0 #0A0A12; pointer-events: none; line-height: 1.6;
+    }
+    #hud b { color: #F2D06B; }
+    #mode { color: #4FE3C1; }
+  </style>
+</head>
+<body>
+  <canvas id="c"></canvas>
+  <div id="hud">
+    <b>BABYLON SAMPLE — the Collapsed Entry (Z1), same map, same art</b><br>
+    click to look · WASD walk · mouse looks UP and DOWN now · <b>T</b> = toggle lighting (compare!) · <b>P</b> = pixel size<br>
+    <span id="mode">mode: LIT — torchlight, conduit glow, light shaft, fog</span>
+  </div>
+  <script src="../vendor/babylon.js"></script>
+  <script type="module">
+    import { loadAssets, PALETTE } from '../src/engine/texgen.js';
+    import { MAP, CELL } from '../src/data/map_whisperlock.js';
+    import { wallTextureKey } from '../src/game/world.js';
+
+    const C = 1.5;                 // 1 map cell = 1.5 m
+    const WALL_H = 2.6;            // corridor ceiling height (m)
+    const TALL_H = 5.2;            // collapsed-room ceiling (raycaster can't do this)
+    const REGION = { x0: 0, y0: 17, x1: 11, y1: 23 };   // Z1: spawn corridor + first room
+    const TALL = (x, y) => x >= 4 && x <= 10 && y >= 19 && y <= 21; // the tall chamber
+    const HOLE = (x, y) => (x === 6 || x === 7) && y === 20;        // collapsed ceiling
+    const CRACK = (x, y) => x === 8 && y === 21;                    // glowing floor crack
+    const wx = (mx) => mx * C, wz = (my) => -my * C;                // map → world
+
+    const canvas = document.getElementById('c');
+    const engine = new BABYLON.Engine(canvas, false, { antialias: false });
+    let pixel = 2; engine.setHardwareScalingLevel(pixel); // PS1-flavored chunk
+    const scene = new BABYLON.Scene(engine);
+    scene.clearColor = BABYLON.Color4.FromHexString(PALETTE.void + 'FF');
+    scene.ambientColor = new BABYLON.Color3(1, 1, 1);
+    scene.fogMode = BABYLON.Scene.FOGMODE_EXP2;
+    scene.fogColor = BABYLON.Color3.FromHexString(PALETTE.void);
+    scene.fogDensity = 0.055;
+    scene.collisionsEnabled = true;
+
+    const assets = await loadAssets();
+
+    // --- materials from the game's own procedural textures -------------------
+    const matCache = {};
+    function matFor(key, { emissive = null, uv = 1 } = {}) {
+      const id = key + (emissive || '') + uv;
+      if (matCache[id]) return matCache[id];
+      const src = assets[key].frames[0];
+      const dt = new BABYLON.DynamicTexture('t_' + id, { width: src.width, height: src.height }, scene, false);
+      dt.getContext().drawImage(src, 0, 0);
+      dt.update(false);
+      dt.updateSamplingMode(BABYLON.Texture.NEAREST_SAMPLINGMODE);
+      dt.uScale = uv; dt.vScale = uv;
+      const m = new BABYLON.StandardMaterial('m_' + id, scene);
+      m.diffuseTexture = dt;
+      m.specularColor = BABYLON.Color3.Black();
+      m.ambientColor = new BABYLON.Color3(0.10, 0.10, 0.12); // faint base visibility
+      if (emissive) m.emissiveColor = BABYLON.Color3.FromHexString(emissive);
+      matCache[id] = m;
+      return m;
+    }
+
+    // --- build the room from the real map grid -------------------------------
+    const isWallChar = (ch) => ch === CELL.WALL || ch === ' ' || ch === CELL.SECRET || ch === CELL.DOOR;
+    const cellAt = (x, y) => (MAP[y] && MAP[y][x]) || '#';
+    const floors = [];
+    for (let y = REGION.y0; y <= REGION.y1; y++) {
+      for (let x = REGION.x0; x <= REGION.x1; x++) {
+        const ch = cellAt(x, y);
+        if (isWallChar(ch)) {
+          // wall column, textured with the game's own per-zone texture
+          const h = (TALL(x, y - 1) || TALL(x, y + 1) || TALL(x - 1, y) || TALL(x + 1, y)) ? TALL_H : WALL_H;
+          const key = ch === CELL.DOOR ? 'door_slide' : ch === CELL.SECRET ? 'wall_scuffed' : wallTextureKey(x, y);
+          const box = BABYLON.MeshBuilder.CreateBox('w', { width: C, depth: C, height: h }, scene);
+          box.position.set(wx(x) + C / 2, h / 2, wz(y) - C / 2);
+          box.material = matFor(key);
+          box.checkCollisions = true;
+          continue;
+        }
+        floors.push([x, y]);
+        // floor tile — TEXTURED (the raycaster only ever had a gradient)
+        if (!CRACK(x, y)) {
+          const f = BABYLON.MeshBuilder.CreateGround('f', { width: C, height: C }, scene);
+          f.position.set(wx(x) + C / 2, 0, wz(y) - C / 2);
+          f.material = matFor('wall_synth');
+          f.checkCollisions = true;
+        } else {
+          // the crack: a pit with cyan machine-glow rising out of it
+          const pitGlow = BABYLON.MeshBuilder.CreateGround('pg', { width: C * 0.9, height: C * 0.9 }, scene);
+          pitGlow.position.set(wx(x) + C / 2, -2.2, wz(y) - C / 2);
+          const gm = new BABYLON.StandardMaterial('gm', scene);
+          gm.emissiveColor = BABYLON.Color3.FromHexString(PALETTE.cyanDeep);
+          gm.disableLighting = true;
+          pitGlow.material = gm;
+          for (const [ox, oz, rw, rd] of [[0, -C * 0.45, C, C * 0.1], [0, C * 0.45, C, C * 0.1], [-C * 0.45, 0, C * 0.1, C], [C * 0.45, 0, C * 0.1, C]]) {
+            const lip = BABYLON.MeshBuilder.CreateGround('lip', { width: rw, height: rd }, scene);
+            lip.position.set(wx(x) + C / 2 + ox, 0.001, wz(y) - C / 2 + oz);
+            lip.material = matFor('wall_synth');
+          }
+        }
+        // ceiling tile — also textured; skipped under the collapse hole
+        const h = TALL(x, y) ? TALL_H : WALL_H;
+        if (!HOLE(x, y)) {
+          const cl = BABYLON.MeshBuilder.CreateGround('cl', { width: C, height: C }, scene);
+          cl.position.set(wx(x) + C / 2, h, wz(y) - C / 2);
+          cl.rotation.x = Math.PI; // face down
+          cl.material = matFor('wall_conduit');
+        }
+      }
+    }
+
+    // --- camera: real first-person — you can finally look up and down --------
+    const cam = new BABYLON.UniversalCamera('cam', new BABYLON.Vector3(wx(2.5), 1.5, wz(22.5)), scene);
+    cam.setTarget(new BABYLON.Vector3(wx(2.5), 1.4, wz(20)));
+    cam.attachControl(canvas, true);
+    cam.keysUp = [87]; cam.keysDown = [83]; cam.keysLeft = [65]; cam.keysRight = [68];
+    cam.speed = 0.14; cam.angularSensibility = 2600; cam.inertia = 0.6;
+    cam.minZ = 0.05;
+    cam.checkCollisions = true;
+    cam.ellipsoid = new BABYLON.Vector3(0.35, 0.75, 0.35);
+    canvas.addEventListener('click', () => canvas.requestPointerLock?.());
+
+    // --- LIGHT: everything the raycaster cannot do ---------------------------
+    const ambient = new BABYLON.HemisphericLight('amb', new BABYLON.Vector3(0, 1, 0), scene);
+    ambient.intensity = 0.06; ambient.groundColor = BABYLON.Color3.FromHexString(PALETTE.deepSteel);
+
+    // 1) a guttering brazier at the corridor mouth — warm, alive, flickering
+    const torchPos = new BABYLON.Vector3(wx(2.5), 1.7, wz(19.4));
+    const torch = new BABYLON.PointLight('torch', torchPos, scene);
+    torch.diffuse = BABYLON.Color3.FromHexString(PALETTE.goldGlow);
+    torch.range = 9;
+    const brazier = BABYLON.MeshBuilder.CreateBox('bz', { width: 0.3, height: 0.5, depth: 0.3 }, scene);
+    brazier.position.set(torchPos.x, 0.25, torchPos.z);
+    const bzm = new BABYLON.StandardMaterial('bzm', scene);
+    bzm.emissiveColor = BABYLON.Color3.FromHexString(PALETTE.gold);
+    brazier.material = bzm;
+
+    // 2) a live conduit strip — cyan light BLEEDING ONTO THE FLOOR, slow pulse
+    const strip = BABYLON.MeshBuilder.CreateBox('strip', { width: 0.08, height: 2.0, depth: 0.08 }, scene);
+    strip.position.set(wx(10) - 0.06, 1.3, wz(20) - C / 2);
+    const sm = new BABYLON.StandardMaterial('sm', scene);
+    sm.emissiveColor = BABYLON.Color3.FromHexString(PALETTE.cyan);
+    sm.disableLighting = true;
+    strip.material = sm;
+    const conduit = new BABYLON.PointLight('conduit', strip.position.clone(), scene);
+    conduit.diffuse = BABYLON.Color3.FromHexString(PALETTE.cyan);
+    conduit.range = 7;
+
+    // 3) the collapse: a shaft of pale light falling through the broken ceiling
+    const shaft = new BABYLON.SpotLight('shaft',
+      new BABYLON.Vector3(wx(7), TALL_H + 0.4, wz(20) - C / 2),
+      new BABYLON.Vector3(0, -1, 0), Math.PI / 4.5, 6, scene);
+    shaft.diffuse = BABYLON.Color3.FromHexString(PALETTE.boneLight);
+    shaft.intensity = 1.4;
+
+    // dust motes drifting down the shaft
+    const dustCnv = document.createElement('canvas'); dustCnv.width = dustCnv.height = 8;
+    const dctx = dustCnv.getContext('2d');
+    dctx.fillStyle = '#D9CBB3'; dctx.beginPath(); dctx.arc(4, 4, 2, 0, Math.PI * 2); dctx.fill();
+    const dust = new BABYLON.ParticleSystem('dust', 120, scene);
+    dust.particleTexture = new BABYLON.Texture(dustCnv.toDataURL(), scene);
+    dust.emitter = new BABYLON.Vector3(wx(7), TALL_H, wz(20) - C / 2);
+    dust.minEmitBox = new BABYLON.Vector3(-0.8, 0, -0.8);
+    dust.maxEmitBox = new BABYLON.Vector3(0.8, 0, 0.8);
+    dust.color1 = new BABYLON.Color4(0.85, 0.8, 0.7, 0.25);
+    dust.color2 = new BABYLON.Color4(0.85, 0.8, 0.7, 0.06);
+    dust.minSize = 0.015; dust.maxSize = 0.05;
+    dust.minLifeTime = 4; dust.maxLifeTime = 9;
+    dust.emitRate = 14;
+    dust.direction1 = new BABYLON.Vector3(-0.02, -0.25, -0.02);
+    dust.direction2 = new BABYLON.Vector3(0.02, -0.5, 0.02);
+    dust.start();
+
+    // 4) gold motes curling out of the floor crack
+    const cyanRise = new BABYLON.ParticleSystem('rise', 60, scene);
+    cyanRise.particleTexture = new BABYLON.Texture(dustCnv.toDataURL(), scene);
+    cyanRise.emitter = new BABYLON.Vector3(wx(8) + C / 2, -0.4, wz(21) - C / 2);
+    cyanRise.color1 = new BABYLON.Color4(0.31, 0.89, 0.76, 0.5);
+    cyanRise.color2 = new BABYLON.Color4(0.12, 0.43, 0.39, 0.1);
+    cyanRise.minSize = 0.02; cyanRise.maxSize = 0.06;
+    cyanRise.minLifeTime = 2.5; cyanRise.maxLifeTime = 5;
+    cyanRise.emitRate = 10;
+    cyanRise.direction1 = new BABYLON.Vector3(-0.05, 0.3, -0.05);
+    cyanRise.direction2 = new BABYLON.Vector3(0.05, 0.6, 0.05);
+    cyanRise.start();
+
+    // --- the enemies: your billboard sprites, standing in real light ---------
+    function spriteStrip(key, frames) {
+      const a = assets[key];
+      const strip = document.createElement('canvas');
+      strip.width = a.w * frames.length; strip.height = a.h;
+      const c2 = strip.getContext('2d');
+      frames.forEach((f, i) => c2.drawImage(a.frames[f], i * a.w, 0));
+      return strip.toDataURL();
+    }
+    // murden (front idle frames), watching you from the tall room
+    const murMgr = new BABYLON.SpriteManager('mur', spriteStrip('murden', [6, 7]), 2,
+      { width: 64, height: 64 }, scene, 0.01, BABYLON.Texture.NEAREST_SAMPLINGMODE);
+    murMgr.fogEnabled = true;
+    const murden = new BABYLON.Sprite('m1', murMgr);
+    const MUR_H = 1.7;
+    murden.width = MUR_H; murden.height = MUR_H;
+    murden.position = new BABYLON.Vector3(wx(8) + C / 2, MUR_H / 2, wz(19) - C / 2);
+    murden.playAnimation(0, 1, true, 420);
+
+    // broken hound — ITS SEAMS CAST LIGHT NOW (a light attached to a creature)
+    const hndMgr = new BABYLON.SpriteManager('hnd', spriteStrip('hound', [0, 1]), 2,
+      { width: 64, height: 64 }, scene, 0.01, BABYLON.Texture.NEAREST_SAMPLINGMODE);
+    hndMgr.fogEnabled = true;
+    const hound = new BABYLON.Sprite('h1', hndMgr);
+    const HND_H = 1.35;
+    hound.width = HND_H; hound.height = HND_H;
+    hound.playAnimation(0, 1, true, 380);
+    const houndGlow = new BABYLON.PointLight('hglow', BABYLON.Vector3.Zero(), scene);
+    houndGlow.diffuse = BABYLON.Color3.FromHexString(PALETTE.cyan);
+    houndGlow.range = 4; houndGlow.intensity = 0.55;
+
+    // the gold cypher, glowing where it lies
+    const pkMgr = new BABYLON.SpriteManager('pk', spriteStrip('pickup_cypher', [0, 1]), 2,
+      { width: 64, height: 64 }, scene, 0.01, BABYLON.Texture.NEAREST_SAMPLINGMODE);
+    pkMgr.fogEnabled = true;
+    const pickup = new BABYLON.Sprite('p1', pkMgr);
+    pickup.width = 0.55; pickup.height = 0.55;
+    pickup.position = new BABYLON.Vector3(wx(5) + C / 2, 0.35, wz(21) - C / 2);
+    pickup.playAnimation(0, 1, true, 300);
+    const pkGlow = new BABYLON.PointLight('pkglow', pickup.position.clone(), scene);
+    pkGlow.diffuse = BABYLON.Color3.FromHexString(PALETTE.goldGlow);
+    pkGlow.range = 3.2; pkGlow.intensity = 0.6;
+
+    // --- living light + hound patrol ------------------------------------------
+    let t = 0;
+    scene.onBeforeRenderObservable.add(() => {
+      t += engine.getDeltaTime();
+      // torch gutter: noise-ish flicker + tiny position sway
+      torch.intensity = lit ? 0.85 + 0.28 * Math.sin(t / 90) * Math.sin(t / 41 + 1.7) : 0;
+      torch.position.x = torchPos.x + Math.sin(t / 130) * 0.05;
+      // conduit slow pulse
+      conduit.intensity = lit ? 0.5 + 0.3 * (0.5 + 0.5 * Math.sin(t / 900)) : 0;
+      sm.emissiveColor = BABYLON.Color3.FromHexString(PALETTE.cyan).scale(0.6 + 0.4 * (0.5 + 0.5 * Math.sin(t / 900)));
+      // hound paces the corridor, glow riding along
+      const hz = wz(19.2) - (0.5 + 0.5 * Math.sin(t / 2600)) * 2.2 * C;
+      hound.position = new BABYLON.Vector3(wx(6.2), HND_H / 2, hz);
+      houndGlow.position.set(hound.position.x, 0.9, hound.position.z);
+      // murden bobs faintly, watching
+      murden.position.y = MUR_H / 2 + Math.sin(t / 700) * 0.02;
+      // pickup bob + glow breath
+      pickup.position.y = 0.35 + Math.sin(t / 500) * 0.05;
+      pkGlow.intensity = lit ? 0.5 + 0.2 * Math.sin(t / 500) : 0;
+    });
+
+    // --- T: the comparison switch — LIT vs FLAT (raycaster-style shading) ----
+    let lit = true;
+    const modeEl = document.getElementById('mode');
+    function setLit(on) {
+      lit = on;
+      ambient.intensity = on ? 0.06 : 0.85;
+      shaft.intensity = on ? 1.4 : 0;
+      dust.emitRate = on ? 14 : 0;
+      modeEl.textContent = on
+        ? 'mode: LIT — torchlight, conduit glow, light shaft, fog'
+        : 'mode: FLAT — roughly what the raycaster does (uniform light + fog only)';
+    }
+    window.addEventListener('keydown', (e) => {
+      if (e.code === 'KeyT') setLit(!lit);
+      if (e.code === 'KeyP') { pixel = pixel >= 3 ? 1 : pixel + 1; engine.setHardwareScalingLevel(pixel); }
+    });
+
+    engine.runRenderLoop(() => scene.render());
+    window.addEventListener('resize', () => engine.resize());
+    window.__LAB = { scene, cam, engine, setLit };
+  </script>
+</body>
+</html>

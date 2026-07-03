@@ -552,3 +552,24 @@ res4 = 42fps → default 3. Suite PASS, no errors.
 Note: at 3× the 64×64 wall texel grain becomes the visible quality floor —
 higher-res or hand-made textures are the next visual lever (or the Babylon
 migration, which Mark has approved in principle pending final Q&A).
+
+## 2026-07-03 — Babylon lab: the comparison room (Mark's sample request)
+Built `lab/babylon-room.html` — the REAL Z1 Collapsed Entry (same map data,
+same procedural textures, same creature sprites via SpriteManager billboards)
+rebuilt in Babylon.js 7.54.3, vendored as a single file (`vendor/babylon.js`,
+6.8MB, npm-registry tarball; no npm at runtime, no build step — Fable-native
+holds). The demo shows everything the raycaster cannot do:
+- textured FLOOR and CEILING · a double-height chamber · look UP and DOWN
+- a collapsed-ceiling light shaft (SpotLight) with drifting dust particles
+- a guttering gold brazier (flickering PointLight) · a cyan conduit strip
+  whose light bleeds onto the wall/floor (slow pulse)
+- the broken hound pacing with a cyan light ATTACHED (its seams light the
+  room) · murden watching from half-dark · the cypher glowing where it lies
+- a floor crack with machine-glow rising from below · EXP2 fog · retro
+  hardware-scaling (P cycles pixel size) · **T toggles LIT vs FLAT** —
+  flat mode approximates the raycaster's uniform lighting for an in-place
+  A/B comparison.
+Verified headless (SwiftShader WebGL): loads clean, no errors; screenshots
+captured of lit room, look-up shaft, flat mode, plus the same vantage in the
+current engine for the side-by-side. Camera collision via Babylon ellipsoid.
+Status: SAMPLE ONLY — no game code touched; migration decision stays Mark's.
