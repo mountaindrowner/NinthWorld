@@ -109,8 +109,11 @@ function updateExplore(dt) {
 
   const dirX = Math.cos(p.angle), dirY = Math.sin(p.angle);
   // analog stick (touch) or WASD (keyboard)
-  const mvF = input.touchActive ? -input.analogY : (input.forward ? 1 : 0) - (input.back ? 1 : 0);
-  const mvS = input.touchActive ? input.analogX : (input.strafeR ? 1 : 0) - (input.strafeL ? 1 : 0);
+  let mvF = input.touchActive ? -input.analogY : (input.forward ? 1 : 0) - (input.back ? 1 : 0);
+  let mvS = input.touchActive ? input.analogX : (input.strafeR ? 1 : 0) - (input.strafeL ? 1 : 0);
+  // normalize so W+A diagonals aren't faster than a straight run
+  const mvLen = Math.hypot(mvF, mvS);
+  if (mvLen > 1) { mvF /= mvLen; mvS /= mvLen; }
   const dx = dirX * mvF * MOVE_FWD * dt + (-dirY) * mvS * MOVE_STRAFE * dt;
   const dy = dirY * mvF * MOVE_FWD * dt + (dirX) * mvS * MOVE_STRAFE * dt;
   if (dx || dy) moveWithCollision(state, p, dx, dy);
