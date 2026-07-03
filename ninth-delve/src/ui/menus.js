@@ -51,7 +51,7 @@ function doUse(state, cm, idx) {
 function doExamine(state, idx) {
   const spec = examineSpec(state, idx);
   const audit = resolveTask({ base: spec.base, eases: spec.eases, hinders: spec.hinders, rng: state.rng });
-  feedLine(state, `examine — ${audit.auto ? 'auto' : `d20 ${audit.natural}`} vs ${audit.target} · ${audit.success ? 'understood' : 'a mystery'}`,
+  feedLine(state, audit.success ? 'its purpose comes clear in your hands' : 'the device keeps its secret',
     audit.success ? PALETTE.cyan : PALETTE.boneShadow);
   logEvent(state, applyExamine(state, idx, audit));
 }
@@ -99,7 +99,7 @@ function glyphIntuit(state) {
   // Intellect task diff 4, hindered by the numenera inability (effective 5,
   // target 15) — one background roll, reported in the feed.
   const audit = resolveTask({ base: 4, eases: [], hinders: [{ label: 'numenera inability', steps: 1 }], rng: state.rng });
-  feedLine(state, `intuit glyphs — d20 ${audit.natural} vs ${audit.target} · ${audit.success ? 'SEEN' : 'nothing'}`,
+  feedLine(state, audit.success ? 'the sequence surfaces like a memory' : 'the glyphs swim, meaningless',
     audit.success ? PALETTE.goldGlow : PALETTE.boneShadow);
   if (audit.success) { state.glyph.intuited = true; logEvent(state, 'The pattern resolves behind your eyes.'); }
   else logEvent(state, 'The glyphs stay meaningless.');

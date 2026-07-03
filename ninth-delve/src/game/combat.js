@@ -36,8 +36,8 @@ export const inCombat = (state) => engagedCreatures(state).length > 0;
 const intrusionTriggered = (state, audit) =>
   audit.natural === 1 || (overLimit(state) && audit.natural === 2);
 
-/** Feed-friendly die readout ("d20 14", or "auto" for difficulty-0 tasks). */
-const die = (audit) => (audit.auto ? 'auto' : `d20 ${audit.natural}`);
+// The message log speaks plain Morrowind ("you strike / your swing goes wide");
+// the Cypher rolls stay entirely under the hood.
 
 // ---------------------------------------------------------------------------
 // player swing
@@ -78,14 +78,13 @@ export function playerSwing(state, heavy = false) {
     rng: state.rng, impaired: isImpaired(p),
   });
 
-  const tag = eases.length || effortLevels ? ` (${[...eases, ...(effortLevels ? ['Effort'] : [])].join('+')})` : '';
   if (intrusionTriggered(state, audit)) {
-    feedLine(state, `atk ${def.name} — ${die(audit)} vs ${audit.target} · FUMBLE`, PALETTE.blood);
+    feedLine(state, `you overreach — something gives`, PALETTE.blood);
     tableIntrusion(state, { creature: target.creatureId, zone: target.zone });
     return;
   }
   if (!audit.success) {
-    feedLine(state, `atk ${def.name} — ${die(audit)} vs ${audit.target}${tag} · miss`, PALETTE.boneShadow);
+    feedLine(state, `your swing goes wide of the ${def.name}`, PALETTE.boneShadow);
     addPopup(state, target.x, target.y, 'miss', PALETTE.boneShadow);
     return;
   }
@@ -105,7 +104,7 @@ export function playerSwing(state, heavy = false) {
   poseFrame(state, target, target.F?.hit ?? 3, 260);
   sfx.hit(); shake(state, 1, 70);
   addPopup(state, target.x, target.y, String(dmg), PALETTE.goldGlow);
-  feedLine(state, `atk ${def.name} — ${die(audit)} vs ${audit.target}${tag} · HIT ${dmg}${note}`, PALETTE.cyan);
+  feedLine(state, `you strike the ${def.name} — ${dmg}${note}`, PALETTE.cyan);
   if (target.hp <= 0) killCreature(state, target);
 }
 
@@ -206,8 +205,10 @@ export function updateCombat(state, dt) {
     // movement — each creature closes differently:
     if (def.ranged && d < 3.5) {
       // murden is a skirmisher: it backs off to throwing range (knives you only
-      // when cornered — the retreat step fails against a wall)
+      // when cornered — the retreat step fails against a wall). It retreats
+      // FACING you — you back a murden off, you never turn it around.
       stepToward(state, e, e.x * 2 - p.x, e.y * 2 - p.y, rt.speed * 0.8 * dt);
+      e.heading = Math.atan2(p.y - e.y, p.x - e.x);
     } else if (d > rt.reach * 0.85) {
       let tx = p.x, ty = p.y;
       if (e.creatureId === 'laak') { // skitter: zigzag approach
@@ -221,6 +222,9 @@ export function updateCombat(state, dt) {
         poseFrame(state, e, e.F.phase, 140);
       }
     }
+
+    // in reach it squares up to you (directional sprite shows its face)
+    if (e.engaged && d <= rt.reach * 1.2) e.heading = Math.atan2(p.y - e.y, p.x - e.x);
 
     // attack when in reach and off cooldown
     if (d <= rt.reach && state.t >= (e.nextAttack || 0) && hasLOS(state, e.x, e.y, p.x, p.y)) {
@@ -253,7 +257,7 @@ function enemyStrike(state, e, def, { ranged = false } = {}) {
   const audit = resolveTask({ base: def.level, eases, hinders, rng: state.rng, impaired: isImpaired(p) });
 
   if (audit.success) {
-    feedLine(state, `def ${label} — ${die(audit)} vs ${audit.target} · evaded`, PALETTE.cyan);
+    feedLine(state, `you evade the ${label}`, PALETTE.cyan);
     if (audit.special.tier === '20') { e.stunUntil = state.t + 1500; feedLine(state, `you turn it aside — the ${def.name} reels`, PALETTE.goldGlow); }
     return;
   }
@@ -265,7 +269,7 @@ function enemyStrike(state, e, def, { ranged = false } = {}) {
   const dmg = ranged ? Math.max(1, def.ranged.damage - armor) : Math.max(0, def.damage - armor);
   applyDamage(p, dmg);
   sfx.hurt(); shake(state, 2, 130); flash(state, PALETTE.blood, 150);
-  feedLine(state, `def ${label} — ${die(audit)} vs ${audit.target} · HIT for ${dmg}${ignoresArmor ? ' (thru Armor)' : ''}`, PALETTE.blood);
+  feedLine(state, `the ${label} hits you — ${dmg}${ignoresArmor ? ' (through armor)' : ''}`, PALETTE.blood);
 
   if (intrusionTriggered(state, audit)) creatureIntrusion(state, e, def);
 }
@@ -331,6 +335,7 @@ function creatureBlocked(state, e, x, y, ghostly = false) {
 
 function stepToward(state, e, tx, ty, step, ghostly = false) {
   const ang = Math.atan2(ty - e.y, tx - e.x);
+  e.heading = ang; // directional sprites read this
   const dx = Math.cos(ang) * step, dy = Math.sin(ang) * step;
   if (!creatureBlocked(state, e, e.x + dx, e.y, ghostly)) e.x += dx;
   if (!creatureBlocked(state, e, e.x, e.y + dy, ghostly)) e.y += dy;

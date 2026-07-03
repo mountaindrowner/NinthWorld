@@ -116,7 +116,7 @@ function renderSprites(ctx, state, assets, dirX, dirY, planeX, planeY) {
 
     const asset = assets[e.sprite];
     if (!asset) continue;
-    const frame = pickFrame(e, asset, state.t);
+    const { frame, flip } = pickFrame(e, asset, state.t, p);
     const fw = asset.w, fh = asset.h;
 
     const cellH = BUF_H / tY;
@@ -134,7 +134,8 @@ function renderSprites(ctx, state, assets, dirX, dirY, planeX, planeY) {
       const drawX = startX + col;
       if (drawX < 0 || drawX >= BUF_W) continue;
       if (tY >= zBuffer[drawX]) continue; // occluded by a nearer wall
-      const texX = Math.floor((col / spriteW) * fw);
+      let texX = Math.floor((col / spriteW) * fw);
+      if (flip) texX = fw - 1 - texX; // mirrored side view
       ctx.drawImage(frame, texX, 0, 1, fh, drawX, topY, 1, spriteH);
       if (fog > 0.02) {
         ctx.globalAlpha = fog; ctx.fillStyle = PALETTE.void;
@@ -183,15 +184,27 @@ function renderPopups(ctx, state, dirX, dirY, planeX, planeY) {
   }
 }
 
-/** Choose a frame canvas: corpse, explicit combat pose, else idle / pickup cycle. */
-function pickFrame(e, asset, t) {
+/**
+ * Choose a frame + mirror flag: corpse, explicit combat pose, else a
+ * DIRECTIONAL idle — front (facing you), back (facing away), or side
+ * (mirrored for the other flank) picked from the creature's heading.
+ */
+function pickFrame(e, asset, t, p) {
   const n = asset.frames.length;
   const F = e.F || {};
-  let idx;
-  if (e.kind === 'creature' && !e.alive) {
-    idx = e.frame ?? (F.deathB ?? F.dead ?? n - 1);       // corpse (deathA plays first via frame)
-  } else if (e.frame != null) idx = e.frame;              // combat pose (lunge/hit/throw/…)
-  else if (e.kind === 'creature') idx = Math.floor(t / 400) % 2 ? (F.idleB ?? 1) : (F.idleA ?? 0);
-  else idx = Math.floor(t / 300) % n;
-  return asset.frames[Math.max(0, Math.min(n - 1, idx))];
+  const clamp = (idx, flip = false) => ({ frame: asset.frames[Math.max(0, Math.min(n - 1, idx))], flip });
+
+  if (e.kind === 'creature' && !e.alive) return clamp(e.frame ?? (F.deathB ?? F.dead ?? n - 1));
+  if (e.frame != null) return clamp(e.frame);            // combat pose (lunge/hit/throw/…)
+  if (e.kind !== 'creature') return clamp(Math.floor(t / 300) % n);
+
+  const bob = Math.floor(t / 400) % 2;
+  const toView = Math.atan2(p.y - e.y, p.x - e.x);        // creature → viewer
+  let rel = (e.heading ?? toView) - toView;
+  while (rel > Math.PI) rel -= 2 * Math.PI;
+  while (rel < -Math.PI) rel += 2 * Math.PI;
+  const a = Math.abs(rel);
+  if (a < Math.PI / 4 && F.front) return clamp(F.front[bob]);   // walking at you
+  if (a > (3 * Math.PI) / 4 && F.back) return clamp(F.back[bob]); // walking away
+  return clamp(bob ? (F.idleB ?? 1) : (F.idleA ?? 0), rel > 0);   // side, mirrored per flank
 }

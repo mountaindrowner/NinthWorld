@@ -510,3 +510,30 @@ threw stones (`def murden (stone) — d20 3 vs 6 · HIT for 1`) from a 3-pack th
 kept its distance · abykos drain tick posed + fed at +4s · zero errors.
 Balance note: stones (min 1 through Armor) slightly raise murden pressure vs the
 Appendix "1 after Armor" line — consistent, but watch it in human playtests.
+
+## 2026-07-03 — Design ruling absorbed + directional sprites + calibration tutorial
+Mark reviewed `06_ONBOARDING_AND_CONTROLS_v2.md` (from the design session) and
+RULED: it is wrong on combat. **Morrowind clone; Cypher underneath; no dice
+visible anywhere, ever** — not even the roll feed's numbers. Turn-based /
+swipe-with-visible-d20 / Effort-cube-dragging are rejected. Thumbstick touch
+scheme stays (tap-to-move rejected). Full response written for the design
+session: **`docs/07_BUILD_STATE_HANDOFF.md`** (timestamped 2026-07-03;
+establishes latest-date-wins convention).
+Built this session:
+- **Dice language purged from the message log**: plain Morrowind speech only
+  ("you strike the murden — 5", "your swing goes wide", "you slip on the way
+  down", "its purpose comes clear in your hands"). resolveTask math unchanged.
+- **N/S/E/W directional sprites**: every creature gained front (facing you)
+  and back (facing away) 2-frame idles; side views mirror per flank. Selection
+  from `e.heading` (set by movement; enemies square up in reach; murden
+  retreats FACING you). Laak/hound/murden/abykos frame strips now 9/10/10/9;
+  detail pass added ground shadows. Corpse/action poses unchanged.
+- **Calibration tutorial (simulation frame v1)**: contextual one-line prompts
+  ("calibration: W A S D — walk / click — swing your blade / hold, release —
+  a heavier cut / E — take / C — devices"), each dismissed by doing; touch
+  variants; title tagline now "the lock will calibrate you as you go".
+  Open design question (in 07 doc §5.2): full simulated cold-open space vs
+  this diegetic calibration-in-place.
+Verified headless (seed 8): suite PASS · gallery renders all 38 frames · back-
+view murden + side hound confirmed in-world · combat log dice-free (regex
+checked) · prompts render · zero errors.

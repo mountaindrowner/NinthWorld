@@ -237,13 +237,13 @@ function climbRolls(state) {
       hinders: state.climbPenalty ? [{ label: 'crumbling hold', steps: 1 }] : [],
       rng: state.rng,
     });
-    feedLine(state, `${label} — ${audit.auto ? 'auto' : `d20 ${audit.natural}`} vs ${audit.target} · ${audit.success ? 'made it' : 'SLIPPED'}`,
+    feedLine(state, audit.success ? `you ${label} — solid holds` : `you slip on the ${label}`,
       audit.success ? PALETTE.cyan : PALETTE.blood);
     return audit.success;
   };
-  if (!roll('climb down')) { applyDamage(p, 3); logEvent(state, 'You slip on the descent — 3 damage. Try again.'); return; }
+  if (!roll('way down')) { applyDamage(p, 3); logEvent(state, 'You slip on the descent — 3 damage. Try again.'); return; }
   tableIntrusion(state, { zone: 'Z4' }); // the wandering-intrusion roll
-  if (!roll('climb up')) { applyDamage(p, 3); logEvent(state, 'You lose your grip on the ascent — 3 damage. Try again.'); return; }
+  if (!roll('way up')) { applyDamage(p, 3); logEvent(state, 'You lose your grip on the ascent — 3 damage. Try again.'); return; }
   p.crossing = true; state.climbPenalty = 0;
   logEvent(state, 'You haul yourself up the far wall — the chasm is behind you.');
 }

@@ -54,6 +54,7 @@ export function spawnExploreEntities(rng) {
         x: ex, y: ey, hp: def.hp, maxHp: def.hp, alive: true, group: p.id, zone: p.zone,
         home: { x: p.x + 0.5, y: p.y + 0.5 }, aggro: def.aggro, engaged: false,
         worldH: def.worldH ?? 1, F: def.F || {},
+        heading: (uid * 2.39996) % (Math.PI * 2), // varied spawn facings
       });
     });
 

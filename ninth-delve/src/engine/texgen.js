@@ -146,9 +146,43 @@ function pixelSprite(ctx, w, h, art, { outline = true } = {}) {
   ctx.drawImage(tmp, 0, 0, hw, hh, 0, 0, w, h);
 }
 
+/** Soft ground shadow: seats a creature on the floor. */
+function shadow(c, cx, w, y = 29) {
+  c.globalAlpha = 0.35; c.fillStyle = P.void;
+  c.fillRect(cx - w / 2, y, w, 2);
+  c.globalAlpha = 1;
+}
+
 // LAAK — palm-sized six-legged lizard, moss body, rust back-speckle (32×32 grid).
 function laakArt(c, f, rnd) {
-  const name = ['idleA', 'idleB', 'lunge', 'hit', 'dead'][f];
+  const name = ['idleA', 'idleB', 'lunge', 'hit', 'dead', 'frontA', 'frontB', 'backA', 'backB'][f];
+  if (name === 'frontA' || name === 'frontB') { // head-on: wide flat head, both eyes
+    const b = name === 'frontB' ? 1 : 0;
+    shadow(c, 16, 16, 28);
+    px(c, 12, 18 - b, 8, 5, P.moss);                       // body rising behind
+    scatter(c, rnd, 5, 12, 18 - b, 8, 3, P.rust);
+    poly(c, [[15, 12 - b], [18, 10 - b], [19, 14 - b], [14, 15 - b]], P.moss); // tail tip over back
+    px(c, 10, 22 - b, 12, 5, P.moss);                      // flat head, wide
+    px(c, 10, 25 - b, 12, 2, P.boneShadow);                // chin
+    px(c, 12, 23 - b, 2, 1, P.goldGlow); px(c, 18, 23 - b, 2, 1, P.goldGlow); // both eyes
+    for (let i = 0; i < 3; i++) {                          // legs splayed both sides
+      px(c, 7 - i, 24 + i - b, 2, 2, P.moss); px(c, 23 + i, 24 + i - b, 2, 2, P.moss);
+    }
+    return;
+  }
+  if (name === 'backA' || name === 'backB') { // tail toward you, head away
+    const b = name === 'backB' ? 1 : 0;
+    shadow(c, 16, 16, 28);
+    px(c, 11, 18 - b, 10, 4, P.moss);                      // far body
+    scatter(c, rnd, 4, 11, 18 - b, 10, 3, P.rust);
+    px(c, 13, 15 - b, 6, 3, P.rustDeep);                   // head beyond (dim)
+    poly(c, [[13, 22 - b], [19, 22 - b], [17 + b, 28], [14 - b, 28]], P.moss); // thick tail base toward you
+    px(c, 15, 26, 2, 2, P.boneShadow);                     // tail underside
+    for (let i = 0; i < 3; i++) {
+      px(c, 8 - i, 20 + i - b, 2, 2, P.moss); px(c, 22 + i, 20 + i - b, 2, 2, P.moss);
+    }
+    return;
+  }
   if (name === 'dead') {
     px(c, 8, 26, 17, 4, P.rustDeep);               // flattened body
     px(c, 9, 25, 14, 2, P.moss);
@@ -160,6 +194,7 @@ function laakArt(c, f, rnd) {
   const lu = name === 'lunge', hit = name === 'hit';
   const bob = name === 'idleB' ? 1 : 0;
   const bx = lu ? 6 : 9, by = 21 + bob - (lu ? 2 : 0);
+  shadow(c, bx + (lu ? 11 : 9), 20, 29);
   // tail (whip, curls opposite on idleB)
   poly(c, [[bx, by + 3], [bx - 6, by + (name === 'idleB' ? 5 : 1)], [bx - 7, by + (name === 'idleB' ? 6 : 2)], [bx, by + 5]], P.moss);
   // body — low slab, lunge stretches it
@@ -183,7 +218,32 @@ function laakArt(c, f, rnd) {
 
 // BROKEN HOUND — wrong-jointed dog, steel hide, cyan light in the seams (32×32).
 function houndArt(c, f, rnd) {
-  const name = ['idleA', 'idleB', 'phase', 'lunge', 'hit', 'dead'][f];
+  const name = ['idleA', 'idleB', 'phase', 'lunge', 'hit', 'dead', 'frontA', 'frontB', 'backA', 'backB'][f];
+  if (name === 'frontA' || name === 'frontB') { // head-on: narrow chest, low skull
+    const b = name === 'frontB' ? 1 : 0;
+    shadow(c, 16, 14);
+    px(c, 12, 12 + b, 8, 10, P.steel);                     // chest slab
+    px(c, 11, 13 + b, 2, 8, P.deepSteel); px(c, 19, 13 + b, 2, 8, P.deepSteel); // shoulders jut
+    for (let i = 0; i < 4; i++) px(c, 15 + (i % 2), 13 + b + i * 2, 1, 1, P.cyan); // sternum seam
+    poly(c, [[13, 20 + b], [19, 20 + b], [18, 26 + b], [14, 26 + b]], P.deepSteel); // skull, low & wrong
+    px(c, 14, 22 + b, 2, 1, P.cyan); px(c, 17, 22 + b, 2, 1, P.cyan); // both eye slits
+    px(c, 15, 25 + b, 3, 1, P.blood);                      // underslung jaw line
+    px(c, 10, 21 + b, 2, 8, P.steel); px(c, 20, 21 + b, 2, 8, P.steel);   // forelegs
+    px(c, 9, 25 + b, 2, 2, P.deepSteel); px(c, 21, 25 + b, 2, 2, P.deepSteel); // wrong knees out
+    return;
+  }
+  if (name === 'backA' || name === 'backB') { // haunches, spine seam running away
+    const b = name === 'backB' ? 1 : 0;
+    shadow(c, 16, 14);
+    px(c, 10, 14 + b, 12, 9, P.steel);                     // wide haunches
+    px(c, 10, 21 + b, 12, 2, P.deepSteel);
+    for (let i = 0; i < 5; i++) px(c, 15 + (b ? (i % 2) : ((i + 1) % 2)), 8 + i * 3, 2, 1, P.cyan); // spine seam foreshortened
+    px(c, 14, 6 + b, 4, 3, P.deepSteel);                   // skull far, lowered
+    poly(c, [[20, 14 + b], [24, 10 + b], [25, 12 + b], [21, 16 + b]], P.deepSteel); // kinked tail
+    px(c, 11, 23 + b, 2, 6, P.steel); px(c, 19, 23 + b, 2, 6, P.steel);   // hind legs
+    px(c, 13, 25 + b, 2, 2, P.deepSteel); px(c, 17, 25 + b, 2, 2, P.deepSteel); // joints wrong-ways
+    return;
+  }
   if (name === 'dead') {
     px(c, 6, 24, 20, 5, P.deepSteel);                 // collapsed heap
     px(c, 8, 22, 12, 3, P.steel);
@@ -197,6 +257,7 @@ function houndArt(c, f, rnd) {
   const bob = name === 'idleB' ? 1 : 0;
   const body = phase ? P.staticWhite : P.steel;
   const dark = phase ? P.staticWhite : P.deepSteel;
+  if (!phase) shadow(c, 17, 20);
   if (phase) c.globalAlpha = 0.5;
 
   const tilt = lu ? -4 : 0;                            // lunge rears up-forward
@@ -235,7 +296,33 @@ function houndArt(c, f, rnd) {
 
 // MURDEN — hunched raven-headed abhuman, mauve rags, gold eye (32×32).
 function murdenArt(c, f, rnd) {
-  const name = ['idleA', 'idleB', 'throw', 'snatch', 'hit', 'dead'][f];
+  const name = ['idleA', 'idleB', 'throw', 'snatch', 'hit', 'dead', 'frontA', 'frontB', 'backA', 'backB'][f];
+  if (name === 'frontA' || name === 'frontB') { // facing you: beak-on, both gold eyes
+    const b = name === 'frontB' ? 1 : 0;
+    shadow(c, 16, 14);
+    px(c, 13, 24, 2, 5, P.boneShadow); px(c, 17, 24, 2, 5, P.boneShadow); // stick legs
+    poly(c, [[9, 14 + b], [23, 14 + b], [24, 22], [21, 24], [18, 22], [15, 25], [12, 22], [8, 23]], P.mauve); // cloak, ragged hem
+    px(c, 10, 16 + b, 3, 5, P.rustDeep);                   // rag shadow
+    scatter(c, rnd, 7, 10, 15, 12, 8, P.deepSteel);        // feathers
+    px(c, 9, 18, 2, 4, P.mauve); px(c, 21, 18, 2, 4, P.mauve); // arms at sides
+    px(c, 9, 22, 2, 1, P.boneShadow); px(c, 21, 22, 2, 1, P.boneShadow); // claw tips
+    poly(c, [[12, 8 + b], [20, 8 + b], [21, 14 + b], [11, 14 + b]], P.deepSteel); // head
+    px(c, 13, 10 + b, 2, 1, P.goldGlow); px(c, 17, 10 + b, 2, 1, P.goldGlow);    // BOTH eyes on you
+    poly(c, [[14, 12 + b], [18, 12 + b], [16, 17 + b]], P.boneShadow);            // beak at you
+    return;
+  }
+  if (name === 'backA' || name === 'backB') { // hunched back: crest, no eyes
+    const b = name === 'backB' ? 1 : 0;
+    shadow(c, 16, 14);
+    px(c, 13, 24, 2, 5, P.boneShadow); px(c, 17, 24, 2, 5, P.boneShadow);
+    poly(c, [[9, 12 + b], [23, 12 + b], [24, 22], [20, 24], [16, 22], [12, 25], [8, 22]], P.mauve); // cloak back
+    for (let i = 0; i < 4; i++) px(c, 11 + i * 3, 14 + b + (i % 2), 1, 7, P.rustDeep); // vertical rag folds
+    scatter(c, rnd, 5, 10, 13, 12, 8, P.deepSteel);
+    poly(c, [[13, 7 + b], [19, 7 + b], [20, 12 + b], [12, 12 + b]], P.deepSteel);  // skull from behind
+    px(c, 15, 5 + b, 2, 3, P.deepSteel);                   // crest feathers
+    px(c, 16, 4 + b, 1, 2, P.boneShadow);
+    return;
+  }
   if (name === 'dead') {
     poly(c, [[7, 29], [10, 23], [22, 22], [26, 29]], P.mauve);   // crumpled rag pile
     px(c, 8, 27, 17, 2, P.rustDeep);
@@ -246,6 +333,7 @@ function murdenArt(c, f, rnd) {
   const sway = name === 'idleB' ? 1 : 0;
   const th = name === 'throw', sn = name === 'snatch', hit = name === 'hit';
   const lean = sn ? 4 : th ? -2 : 0;
+  shadow(c, 16, 16);
   // stick legs, backward knees
   px(c, 13, 24, 2, 3, P.boneShadow); px(c, 12, 27, 2, 3, P.boneShadow); px(c, 12, 29, 3, 1, P.deepSteel);
   px(c, 18, 24, 2, 3, P.boneShadow); px(c, 19, 27, 2, 3, P.boneShadow); px(c, 19, 29, 3, 1, P.deepSteel);
@@ -279,9 +367,26 @@ function murdenArt(c, f, rnd) {
 // ABYKOS — translucent humanoid of static, 64×96 (32×48 grid). No outline;
 // it isn't quite there. Gold converges inward on drain; static bursts on hit.
 function abykosArt(c, f, rnd) {
-  const name = ['idleA', 'idleB', 'drain', 'touch', 'hit', 'deathA', 'deathB'][f];
-  const sway = name === 'idleB' ? 1 : 0;
+  const name = ['idleA', 'idleB', 'drain', 'touch', 'hit', 'deathA', 'deathB', 'backA', 'backB'][f];
+  const sway = (name === 'idleB' || name === 'backB') ? 1 : 0;
   const CX = 16;
+
+  if (name === 'backA' || name === 'backB') { // from behind: no eyes, dimmer core
+    c.globalAlpha = 0.45;
+    px(c, CX - 2 + sway, 3, 4, 6, P.staticWhite);
+    px(c, CX - 3 + sway, 4, 6, 4, P.staticWhite);
+    for (let i = 0; i < 13; i++) {
+      if (i > 1 && (i * 7 + 3) % 5 === 0) continue;
+      const w = 12 - Math.floor(i * 0.55) + ((i * 5) % 3) - 1;
+      const jit = ((i * 11) % 3) - 1;
+      px(c, CX - w / 2 + sway + jit, 10 + i * 2, w, 1, P.staticWhite);
+    }
+    for (let i = 0; i < 10; i++) px(c, CX - 4 + ((i * 7) % 9) + sway, 34 + i + ((i * 13) % 4), 1, 2, P.staticWhite);
+    c.globalAlpha = 1;
+    c.globalAlpha = 0.4; px(c, CX + sway, 12, 1, 16, P.staticWhite); c.globalAlpha = 1; // dim core
+    scatter(c, rnd, 8, CX - 6 + sway, 8, 12, 28, P.cyanDeep);
+    return;
+  }
 
   if (name === 'deathB') { // almost gone: a loose column of motes + a fading core
     scatter(c, rnd, 22, 8, 6, 16, 36, P.staticWhite);
@@ -415,10 +520,10 @@ export const MANIFEST = [
     .map((k) => ({ key: k, path: `assets/textures/${k}.png`, w: 64, h: 64, frames: 1, draw: TEXTURE_DRAW[k] })),
   { key: 'pillar_glyph', path: 'assets/textures/pillar_glyphs_strip.png', w: 64, h: 64, frames: 4, draw: TEXTURE_DRAW.pillar_glyph },
   // sprites
-  { key: 'laak', path: 'assets/sprites/laak.png', w: 64, h: 64, frames: 5, draw: SPRITE_DRAW.laak },
-  { key: 'hound', path: 'assets/sprites/hound.png', w: 64, h: 64, frames: 6, draw: SPRITE_DRAW.hound },
-  { key: 'murden', path: 'assets/sprites/murden.png', w: 64, h: 64, frames: 6, draw: SPRITE_DRAW.murden },
-  { key: 'abykos', path: 'assets/sprites/abykos.png', w: 64, h: 96, frames: 7, draw: SPRITE_DRAW.abykos },
+  { key: 'laak', path: 'assets/sprites/laak.png', w: 64, h: 64, frames: 9, draw: SPRITE_DRAW.laak },
+  { key: 'hound', path: 'assets/sprites/hound.png', w: 64, h: 64, frames: 10, draw: SPRITE_DRAW.hound },
+  { key: 'murden', path: 'assets/sprites/murden.png', w: 64, h: 64, frames: 10, draw: SPRITE_DRAW.murden },
+  { key: 'abykos', path: 'assets/sprites/abykos.png', w: 64, h: 96, frames: 9, draw: SPRITE_DRAW.abykos },
   { key: 'pickup_cypher', path: 'assets/sprites/pickup_cypher.png', w: 64, h: 64, frames: 2, draw: SPRITE_DRAW.pickup_cypher },
   { key: 'pickup_oddity', path: 'assets/sprites/pickup_oddity.png', w: 64, h: 64, frames: 1, draw: SPRITE_DRAW.pickup_oddity },
   { key: 'pickup_shins', path: 'assets/sprites/pickup_shins.png', w: 64, h: 64, frames: 1, draw: SPRITE_DRAW.pickup_shins },

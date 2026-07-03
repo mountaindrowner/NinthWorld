@@ -103,7 +103,9 @@ function exploreWorldEvents() {
 function updateExplore(dt) {
   const p = state.player;
   const turn = ((input.turnR ? 1 : 0) - (input.turnL ? 1 : 0)) * TURN_RATE * dt;
-  p.angle += turn + input.consumeYaw() * MOUSE_SENS;
+  const yawD = input.consumeYaw() * MOUSE_SENS;
+  p.angle += turn + yawD;
+  tut.looked += Math.abs(turn) + Math.abs(yawD);
 
   const dirX = Math.cos(p.angle), dirY = Math.sin(p.angle);
   // analog stick (touch) or WASD (keyboard)
@@ -175,6 +177,39 @@ function drawRollFeed() {
   buf.globalAlpha = 1;
 }
 
+// --- calibration prompts (the tutorial-as-simulation frame) -------------------
+// The Whisperlock's dead mind "calibrates" the intruder: one verb per moment,
+// each prompt dismissed by doing the thing. No modals, no manual.
+const tut = { looked: 0, heavy: false, cyMenu: false };
+
+function tutPrompt() {
+  const p = state.player;
+  const engaged = state.entities.some((e) => e.kind === 'creature' && e.alive && !e.hidden && e.engaged);
+  const nearPickup = state.entities.some((e) => e.kind === 'pickup' && !e.hidden && !e.taken
+    && tileDist(p.x, p.y, e.x, e.y) < 2.2);
+  const collected = p.shins > 5 || p.cyphers.length > 0 || p.oddities.length > 0;
+  const touch = input.touchActive;
+
+  if (engaged && state.stats.kills === 0) return touch ? 'calibration: ATK — swing your blade' : 'calibration: click — swing your blade';
+  if (!touch && engaged && state.stats.kills >= 1 && !tut.heavy) return 'calibration: hold, then release — a heavier cut';
+  if (nearPickup && !collected) return 'calibration: E — take what you find';
+  if (p.cyphers.length > 0 && !tut.cyMenu) return 'calibration: C — the devices you carry';
+  const spawnDist = tileDist(p.x, p.y, 2.5, 22.5);
+  if (spawnDist < 2.5) return touch ? 'calibration: push the stick — walk' : 'calibration: W A S D — walk';
+  if (tut.looked < 1.2) return touch ? 'calibration: drag the view — look' : 'calibration: move the mouse — look';
+  return null;
+}
+
+function drawTutorial() {
+  if (state.player.swingHeavy) tut.heavy = true;
+  const msg = tutPrompt();
+  if (!msg) return;
+  const pulse = 0.65 + 0.35 * Math.sin(state.t / 350);
+  buf.globalAlpha = pulse;
+  uiText(buf, msg, BUF_W / 2, BUF_H - 46, { color: PALETTE.cyan, align: 'center' });
+  buf.globalAlpha = 1;
+}
+
 function drawCrosshair() {
   buf.fillStyle = PALETTE.boneLight;
   buf.fillRect(BUF_W / 2 - 3, BUF_H / 2, 6, 1);
@@ -214,11 +249,11 @@ function loop(now) {
     if (keys.includes('KeyR')) tryRest(state);
     if (keys.includes('KeyF')) toggleAggression(state);
     if (keys.includes('Tab')) { state.mode = 'SHEET'; document.exitPointerLock?.(); input.clearBuffered(); }
-    else if (keys.includes('KeyC')) { state.cypherMenu = { context: 'explore', ret: 'EXPLORE' }; state.mode = 'CYPHERS'; document.exitPointerLock?.(); input.clearBuffered(); }
+    else if (keys.includes('KeyC')) { tut.cyMenu = true; state.cypherMenu = { context: 'explore', ret: 'EXPLORE' }; state.mode = 'CYPHERS'; document.exitPointerLock?.(); input.clearBuffered(); }
   }
 
   renderView(buf, state, assets);
-  if (state.mode === 'EXPLORE') { drawViewmodel(); drawCrosshair(); }
+  if (state.mode === 'EXPLORE') { drawViewmodel(); drawCrosshair(); drawTutorial(); }
   drawHud(buf, state, assets);
   drawRollFeed();
   if (state.mode === 'EXPLORE' && input.touchActive) drawTouchControls(buf, input);
@@ -279,22 +314,22 @@ function drawGallery() {
   buf.fillStyle = PALETTE.deepSteel; buf.fillRect(0, 0, BUF_W, 10);
   uiText(buf, 'creature frames', 4, 8, { color: PALETTE.gold });
   const rows = [
-    ['laak', ['idleA', 'idleB', 'lunge', 'hit', 'dead']],
-    ['hound', ['idleA', 'idleB', 'phase', 'lunge', 'hit', 'dead']],
-    ['murden', ['idleA', 'idleB', 'throw', 'snatch', 'hit', 'dead']],
-    ['abykos', ['idleA', 'idleB', 'drain', 'touch', 'hit', 'deathA', 'deathB']],
+    ['laak', ['idlA', 'idlB', 'lung', 'hit', 'dead', 'frA', 'frB', 'bkA', 'bkB']],
+    ['hound', ['idlA', 'idlB', 'phas', 'lung', 'hit', 'dead', 'frA', 'frB', 'bkA', 'bkB']],
+    ['murden', ['idlA', 'idlB', 'thrw', 'sntc', 'hit', 'dead', 'frA', 'frB', 'bkA', 'bkB']],
+    ['abykos', ['idlA', 'idlB', 'drn', 'tch', 'hit', 'dthA', 'dthB', 'bkA', 'bkB']],
   ];
-  let y = 14;
+  let y = 13;
   for (const [key, names] of rows) {
     const a = assets[key];
-    const h = key === 'abykos' ? 60 : 40;
+    const h = key === 'abykos' ? 52 : 34;
     names.forEach((n, i) => {
-      const x = 4 + i * 52;
-      buf.drawImage(a.frames[i], x, y, key === 'abykos' ? 40 : 40, h);
-      uiText(buf, n, x, y + h + 8, { color: PALETTE.boneShadow });
+      const x = 2 + i * 38;
+      buf.drawImage(a.frames[i], x, y, 34, h);
+      uiText(buf, n, x + 2, y + h + 7, { color: PALETTE.boneShadow });
     });
-    uiText(buf, key, BUF_W - 4, y + 10, { color: PALETTE.goldGlow, align: 'right' });
-    y += h + 12;
+    uiText(buf, key, BUF_W - 4, y + 8, { color: PALETTE.goldGlow, align: 'right' });
+    y += h + 10;
   }
 }
 
@@ -308,7 +343,7 @@ function drawTitle() {
   buf.fillStyle = PALETTE.gold; buf.font = '18px monospace'; buf.textAlign = 'center';
   buf.fillText('THE WHISPERLOCK', BUF_W / 2, 100);
   buf.fillStyle = PALETTE.boneShadow; buf.font = '8px monospace';
-  buf.fillText('a ninth delve — Cypher System prototype', BUF_W / 2, 116);
+  buf.fillText('the lock will calibrate you as you go', BUF_W / 2, 116);
   buf.fillStyle = PALETTE.cyan;
   if ((state.t / 600 | 0) % 2) buf.fillText('click, or press Enter, to delve', BUF_W / 2, 150);
   buf.fillStyle = PALETTE.boneShadow; buf.font = '8px monospace';
