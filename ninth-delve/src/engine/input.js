@@ -1,6 +1,6 @@
 // Input (Tech §7). Explore: WASD move/strafe, Pointer-Lock mouse-yaw with
 // Q/arrow turn fallback, E to interact. Menus/modals: mouse clicks (translated
-// into 320×200 buffer space) and number hotkeys. main.js owns integration.
+// into pixel buffer space) and number hotkeys. main.js owns integration.
 
 const HELD = {
   KeyW: 'forward', ArrowUp: 'forward',
@@ -9,14 +9,17 @@ const HELD = {
   KeyQ: 'turnL', ArrowLeft: 'turnL', ArrowRight: 'turnR',
 };
 
-// Touch layout in 320×200 buffer coords (shared with ui/touch.js for drawing).
-// Left half is the move stick; the right half (minus these buttons) is look-drag.
+import { BUF_W, BUF_H } from './screen.js';
+
+// Touch layout in buffer coords (shared with ui/touch.js for drawing), anchored
+// to the buffer edges so it survives resolution changes. Left half is the move
+// stick; the right half (minus these buttons) is look-drag. HUD top = BUF_H−40.
 export const TOUCH_UI = {
-  joy: { cx: 44, cy: 150, r: 26 },        // virtual stick base (visual)
+  joy: { cx: 44, cy: BUF_H - 66, r: 26 },  // virtual stick base (visual)
   buttons: [
-    { id: 'interact', label: 'E', x: 264, y: 128, w: 52, h: 24 },
-    { id: 'KeyC', label: 'Cy', x: 264, y: 100, w: 52, h: 24 },
-    { id: 'Tab', label: 'Sheet', x: 264, y: 72, w: 52, h: 24 },
+    { id: 'interact', label: 'E', x: BUF_W - 56, y: BUF_H - 72, w: 52, h: 24 },
+    { id: 'KeyC', label: 'Cy', x: BUF_W - 56, y: BUF_H - 100, w: 52, h: 24 },
+    { id: 'Tab', label: 'Sheet', x: BUF_W - 56, y: BUF_H - 128, w: 52, h: 24 },
   ],
 };
 const JOY_PX = 46; // screen px from stick origin for full deflection
@@ -80,7 +83,7 @@ export function createInput(canvas) {
       if (!state.wantPointerLock) { state._clicks.push(b); active.set(t.identifier, { role: 'tap' }); continue; }
       const btn = TOUCH_UI.buttons.find((r) => inRect(b, r));
       if (btn) { fireButton(btn.id); active.set(t.identifier, { role: 'button' }); continue; }
-      if (b.x < 160) { active.set(t.identifier, { role: 'move', ox: t.clientX, oy: t.clientY }); }
+      if (b.x < BUF_W / 2) { active.set(t.identifier, { role: 'move', ox: t.clientX, oy: t.clientY }); }
       else { active.set(t.identifier, { role: 'look', prevX: t.clientX }); }
     }
     e.preventDefault();

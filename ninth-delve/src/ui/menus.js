@@ -13,7 +13,7 @@ import { tableIntrusion } from '../game/intrusions.js';
 
 const GLYPH_SYM = ['◇', '△', '▽', '▣'];
 
-const BUF_W = 320, BUF_H = 200;
+import { BUF_W, BUF_H } from '../engine/screen.js';
 
 /** Encounter status + action menu (drawn while mode==='ENCOUNTER'). */
 export function drawEncounterMenu(ctx, state, clicks, keys) {

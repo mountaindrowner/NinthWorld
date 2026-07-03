@@ -4,6 +4,7 @@
 
 import { PALETTE } from '../engine/texgen.js';
 import { TOUCH_UI } from '../engine/input.js';
+import { BUF_W, BUF_H } from '../engine/screen.js';
 
 export function drawTouchControls(ctx, input) {
   ctx.save();
@@ -26,6 +27,6 @@ export function drawTouchControls(ctx, input) {
 
   ctx.globalAlpha = 0.3;
   ctx.fillStyle = PALETTE.boneShadow; ctx.textAlign = 'right';
-  ctx.fillText('drag to look', 250, 196);
+  ctx.fillText('drag to look', BUF_W - 66, BUF_H - 46);
   ctx.restore();
 }

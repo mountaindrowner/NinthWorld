@@ -4,7 +4,7 @@
 import { PALETTE } from '../engine/texgen.js';
 import { panel, text, button } from './widgets.js';
 
-const BUF_W = 320, BUF_H = 200;
+import { BUF_W, BUF_H } from '../engine/screen.js';
 
 export function drawReport(ctx, state, clicks, keys) {
   const p = state.player, s = state.stats;

@@ -10,7 +10,7 @@ import { resolveTask } from '../game/dice.js';
 import { effortCost, payCost, isImpaired } from '../game/player.js';
 import { sfx } from '../engine/audio.js';
 
-const BUF_W = 320, BUF_H = 200;
+import { BUF_W, BUF_H } from '../engine/screen.js';
 const ROLL_MS = 650;
 
 /**

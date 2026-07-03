@@ -1,5 +1,5 @@
 // Shared immediate-mode UI primitives for the pixel HUD/tray/menus/report.
-// Everything draws into the 320×200 buffer; buttons test against per-frame
+// Everything draws into the pixel buffer; buttons test against per-frame
 // click/key lists (mutated on hit) so the same lists thread through all panels.
 
 import { PALETTE } from '../engine/texgen.js';
@@ -15,23 +15,31 @@ export function panel(ctx, x, y, w, h, title) {
   }
 }
 
-export function text(ctx, str, x, y, { color = PALETTE.boneLight, size = 8, align = 'left' } = {}) {
-  ctx.fillStyle = color; ctx.font = `${size}px monospace`; ctx.textAlign = align;
+/** fillText with a 1px void outline so text stays legible on any backdrop. */
+function outlined(ctx, str, x, y, color) {
+  ctx.fillStyle = PALETTE.void;
+  for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) ctx.fillText(str, x + dx, y + dy);
+  ctx.fillStyle = color;
   ctx.fillText(str, x, y);
+}
+
+export function text(ctx, str, x, y, { color = PALETTE.boneLight, size = 8, align = 'left' } = {}) {
+  ctx.font = `${size}px monospace`; ctx.textAlign = align;
+  outlined(ctx, str, x, y, color);
 }
 
 /** Word-wrap into the buffer; returns the y after the last line. */
 export function wrapText(ctx, str, x, y, maxW, lineH, opts = {}) {
   ctx.font = `${opts.size || 8}px monospace`; ctx.textAlign = 'left';
-  ctx.fillStyle = opts.color || PALETTE.boneLight;
+  const color = opts.color || PALETTE.boneLight;
   const words = str.split(' ');
   let line = '', cy = y;
   for (const w of words) {
     const test = line ? `${line} ${w}` : w;
-    if (ctx.measureText(test).width > maxW && line) { ctx.fillText(line, x, cy); line = w; cy += lineH; }
+    if (ctx.measureText(test).width > maxW && line) { outlined(ctx, line, x, cy, color); line = w; cy += lineH; }
     else line = test;
   }
-  if (line) { ctx.fillText(line, x, cy); cy += lineH; }
+  if (line) { outlined(ctx, line, x, cy, color); cy += lineH; }
   return cy;
 }
 
@@ -48,10 +56,9 @@ export function button(ctx, b, clicks, keys) {
   ctx.fillRect(b.x, b.y, b.w, b.h);
   ctx.strokeStyle = dim ? PALETTE.boneShadow : (b.accent || PALETTE.cyan); ctx.lineWidth = 1;
   ctx.strokeRect(b.x + 0.5, b.y + 0.5, b.w - 1, b.h - 1);
-  ctx.fillStyle = dim ? PALETTE.boneShadow : PALETTE.boneLight;
   ctx.font = '8px monospace'; ctx.textAlign = 'left';
   const hk = b.hotkey ? `${b.hotkey.replace('Digit', '')} ` : '';
-  ctx.fillText(hk + b.label, b.x + 4, b.y + Math.round(b.h / 2) + 3);
+  outlined(ctx, hk + b.label, b.x + 4, b.y + Math.round(b.h / 2) + 3, dim ? PALETTE.boneShadow : PALETTE.boneLight);
   if (dim) return false;
 
   const ci = clicks.findIndex((c) => inside(c, b));

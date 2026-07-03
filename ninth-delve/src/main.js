@@ -21,9 +21,10 @@ import { drawModal, drawSheet, drawEncounterMenu, drawCypherMenu, drawGlyphPuzzl
 import { openTray, updateTray, drawTray } from './ui/dicetray.js';
 import { drawReport } from './ui/report.js';
 import { drawTouchControls } from './ui/touch.js';
+import { text as uiText } from './ui/widgets.js';
 import { KAVE } from './data/pregen_kave.js';
 
-const BUF_W = 320, BUF_H = 200;
+import { BUF_W, BUF_H } from './engine/screen.js';
 const MOVE_FWD = 4, MOVE_STRAFE = 3, TURN_RATE = 2.5, MOUSE_SENS = 0.0022;
 
 const params = new URLSearchParams(location.search);
@@ -240,8 +241,7 @@ function finishFrame(now) {
     buf.globalAlpha = 0.35 * ((state.fx.flashUntil - state.t) / 150);
     buf.fillStyle = state.fx.flashColor; buf.fillRect(0, 0, BUF_W, BUF_H); buf.globalAlpha = 1;
   }
-  buf.fillStyle = PALETTE.cyan; buf.font = '8px monospace'; buf.textAlign = 'right';
-  buf.fillText(`${fps} fps`, BUF_W - 4, 9);
+  uiText(buf, `${fps} fps`, BUF_W - 4, 9, { color: PALETTE.cyan, align: 'right' });
 
   // shake-offset blit
   let sx = offX, sy = offY;

@@ -396,3 +396,18 @@ Verified (headless, `hasTouch` mobile context, synthetic TouchEvents): tap-start
 E button collected a cypher (→ pickup modal); suite still PASS; no errors.
 Note: pointer-lock isn't used on touch (we preventDefault touches, so no synthetic
 click/lock); look is raw drag-delta yaw. No pitch (engine is yaw-only by design).
+
+## 2026-07-03 — Post-slice: widescreen + text legibility
+Done (user-requested):
+- **Widescreen 384×216 (16:9)**, same texel density as 320×200. New
+  `engine/screen.js` exports BUF_W/BUF_H; all hardcoded dims in raycaster, main,
+  hud, menus, dicetray, report, input (TOUCH_UI now edge-anchored), touch, and
+  index.html now derive from it. Raycaster camera plane scaled by aspect
+  (0.66 × aspect/1.6) so the wider buffer widens the FOV instead of stretching.
+- **Legible text everywhere**: `widgets.text`/`wrapText`/`button` labels draw a
+  1px void outline under every glyph; fps counter routed through the same path.
+  Panels/chips retain their backing fills.
+Verified: suite PASS, no errors; 16:9 window fills nearly edge-to-edge; ticker
+text over a bright sprite and whisper text over walls both readable.
+Doc note: Tech §3 / GDD pillar #4 say "320×200" — deliberately superseded by
+user request; the integer-upscale + pixelated pipeline is unchanged.

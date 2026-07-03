@@ -6,7 +6,7 @@ import { text, bar } from './widgets.js';
 import { facingLabel } from '../game/world.js';
 import { overLimit } from '../game/state.js';
 
-const BUF_W = 320, BUF_H = 200;
+import { BUF_W, BUF_H } from '../engine/screen.js';
 const TRACK_STATE = { hale: 0, impaired: 1, debilitated: 2, dead: 2 };
 const POOL_COLORS = { might: PALETTE.blood, speed: PALETTE.cyan, intellect: PALETTE.gold };
 

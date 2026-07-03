@@ -7,10 +7,13 @@
 import { renderSolidAt, wallTextureKey, doorSlide } from '../game/world.js';
 import { visiblePickups, liveCreatures } from '../game/entities.js';
 import { PALETTE } from './texgen.js';
+import { BUF_W, BUF_H } from './screen.js';
 
-const BUF_W = 320, BUF_H = 200, HORIZON = BUF_H / 2;
+const HORIZON = BUF_H / 2;
 const TEX = 64;
-const FOV = 0.66;          // camera-plane half-length (~66° horizontal)
+// camera-plane half-length: 0.66 (~66°) at 1.6 aspect, scaled so a wider buffer
+// widens the horizontal FOV instead of stretching the world.
+const FOV = 0.66 * ((BUF_W / BUF_H) / 1.6);
 const FOG_FAR = 13;        // cells at which a wall fully fades to void
 const SIDE_SHADE = 0.28;   // E/W wall darkening (≈ ×0.75 brightness)
 
@@ -30,7 +33,7 @@ function ensureGradients(ctx) {
 /**
  * Render the first-person view: walls (with z-buffer), then billboard sprites
  * clipped against it.
- * @param {CanvasRenderingContext2D} ctx  the 320×200 buffer context
+ * @param {CanvasRenderingContext2D} ctx  the pixel buffer context
  * @param {Object} state  GameState (uses state.player, state.entities, state.t)
  * @param {Record<string,{frames:HTMLCanvasElement[],w:number,h:number}>} assets
  */
