@@ -27,6 +27,7 @@ const MOVE_FWD = 4, MOVE_STRAFE = 3, TURN_RATE = 2.5, MOUSE_SENS = 0.0022;
 
 const params = new URLSearchParams(location.search);
 const TEST = params.has('test');
+const GALLERY = params.has('sprites'); // dev: render every creature frame
 const SEED = params.has('seed') ? (parseInt(params.get('seed'), 10) | 0) : 1;
 
 const screen = document.getElementById('screen');
@@ -200,6 +201,8 @@ function loop(now) {
   for (const e of state.entities) if (e.frameUntil && state.t > e.frameUntil) { e.frame = null; e.frameUntil = 0; }
   if (state.mode === 'REPORT' && !state.endTime) state.endTime = state.t;
 
+  if (modeAtStart === 'GALLERY') { drawGallery(); finishFrame(now); return; }
+
   if (modeAtStart === 'TITLE') {
     drawTitle();
     if (clicks.length || keys.includes('Enter') || keys.includes('KeyE') || keys.includes('Space')) startDelve();
@@ -268,6 +271,31 @@ function finishFrame(now) {
   frames++;
   if (now - fpsClock >= 500) { fps = Math.round((frames * 1000) / (now - fpsClock)); frames = 0; fpsClock = now; }
   requestAnimationFrame(loop);
+}
+
+/** Dev sprite sheet (?sprites=1): every frame of every creature, labeled. */
+function drawGallery() {
+  buf.fillStyle = PALETTE.steel; buf.fillRect(0, 0, BUF_W, BUF_H);
+  buf.fillStyle = PALETTE.deepSteel; buf.fillRect(0, 0, BUF_W, 10);
+  uiText(buf, 'creature frames', 4, 8, { color: PALETTE.gold });
+  const rows = [
+    ['laak', ['idleA', 'idleB', 'lunge', 'hit', 'dead']],
+    ['hound', ['idleA', 'idleB', 'phase', 'lunge', 'hit', 'dead']],
+    ['murden', ['idleA', 'idleB', 'throw', 'snatch', 'hit', 'dead']],
+    ['abykos', ['idleA', 'idleB', 'drain', 'touch', 'hit', 'deathA', 'deathB']],
+  ];
+  let y = 14;
+  for (const [key, names] of rows) {
+    const a = assets[key];
+    const h = key === 'abykos' ? 60 : 40;
+    names.forEach((n, i) => {
+      const x = 4 + i * 52;
+      buf.drawImage(a.frames[i], x, y, key === 'abykos' ? 40 : 40, h);
+      uiText(buf, n, x, y + h + 8, { color: PALETTE.boneShadow });
+    });
+    uiText(buf, key, BUF_W - 4, y + 10, { color: PALETTE.goldGlow, align: 'right' });
+    y += h + 12;
+  }
 }
 
 function drawTitle() {
@@ -379,6 +407,7 @@ function runTests() {
 async function boot() {
   resize();
   assets = await loadAssets();
+  if (GALLERY) state.mode = 'GALLERY';
   window.__NINTH = { state, get fps() { return fps; } };
   if (TEST) runTests();
   requestAnimationFrame(loop);

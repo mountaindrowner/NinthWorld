@@ -102,7 +102,7 @@ export function playerSwing(state, heavy = false) {
 
   target.hp -= dmg;
   target.engaged = true;
-  poseFrame(state, target, def.special.includes('phase') ? 4 : 3, 260); // hit frame
+  poseFrame(state, target, target.F?.hit ?? 3, 260);
   sfx.hit(); shake(state, 1, 70);
   addPopup(state, target.x, target.y, String(dmg), PALETTE.goldGlow);
   feedLine(state, `atk ${def.name} — ${die(audit)} vs ${audit.target}${tag} · HIT ${dmg}${note}`, PALETTE.cyan);
@@ -138,6 +138,8 @@ function killCreature(state, e) {
   e.alive = false;
   state.stats.kills += 1;
   const def = CREATURES[e.creatureId];
+  // death pose plays briefly, then the corpse settles on its final frame
+  poseFrame(state, e, e.F?.deathA ?? e.F?.dead ?? 4, 450);
   feedLine(state, `the ${def.name} falls`, PALETTE.goldGlow);
   logEvent(state, `The ${def.name} falls.`);
   if (state.stats.kills === 1) requestWhisper(state, 'kill');
@@ -183,6 +185,8 @@ export function updateCombat(state, dt) {
     if (e.creatureId === 'abykos') {
       if (state.t >= (e.nextDrain || 0) && p.cyphers.length) {
         sfx.drain();
+        poseFrame(state, e, e.F.drain, 900); // arms spread, gold pulled inward
+        addPopup(state, e.x, e.y, 'drain', PALETTE.goldGlow);
         drainTick(state);
         e.nextDrain = state.t + 9000;
       }
@@ -192,15 +196,35 @@ export function updateCombat(state, dt) {
       } else e.hugTime = 0;
     }
 
-    // chase (hound phases through S walls — its den telegraphs the vault trick)
-    if (d > rt.reach * 0.85) {
-      stepToward(state, e, p.x, p.y, rt.speed * dt, e.creatureId === 'hound');
+    // murden: pelts you with stones from range (its throw frame earns its keep)
+    if (def.ranged && d > rt.reach && d <= def.ranged.range
+      && state.t >= (e.nextThrow || 0) && hasLOS(state, e.x, e.y, p.x, p.y)) {
+      e.nextThrow = state.t + def.ranged.cd;
+      enemyStrike(state, e, def, { ranged: true });
+    }
+
+    // movement — each creature closes differently:
+    if (def.ranged && d < 3.5) {
+      // murden is a skirmisher: it backs off to throwing range (knives you only
+      // when cornered — the retreat step fails against a wall)
+      stepToward(state, e, e.x * 2 - p.x, e.y * 2 - p.y, rt.speed * 0.8 * dt);
+    } else if (d > rt.reach * 0.85) {
+      let tx = p.x, ty = p.y;
+      if (e.creatureId === 'laak') { // skitter: zigzag approach
+        const ph = Math.sin(state.t / 140 + e.uid * 3);
+        const side = Math.atan2(p.y - e.y, p.x - e.x) + Math.PI / 2;
+        tx += Math.cos(side) * ph * 1.1; ty += Math.sin(side) * ph * 1.1;
+      }
+      stepToward(state, e, tx, ty, rt.speed * dt, e.creatureId === 'hound');
+      // mid-wall the hound is elsewhere: show its static-white phase frame
+      if (e.creatureId === 'hound' && cellAt(Math.floor(e.x), Math.floor(e.y)) === CELL.SECRET) {
+        poseFrame(state, e, e.F.phase, 140);
+      }
     }
 
     // attack when in reach and off cooldown
     if (d <= rt.reach && state.t >= (e.nextAttack || 0) && hasLOS(state, e.x, e.y, p.x, p.y)) {
       e.nextAttack = state.t + rt.cd;
-      poseFrame(state, e, 2, 300); // lunge
       enemyStrike(state, e, def);
     }
   }
@@ -209,10 +233,12 @@ export function updateCombat(state, dt) {
 }
 
 /** One enemy attack = one background player defense roll (you still roll everything). */
-function enemyStrike(state, e, def) {
+function enemyStrike(state, e, def, { ranged = false } = {}) {
   const p = state.player;
-  const touch = def.special.includes('might_touch');
+  const touch = !ranged && def.special.includes('might_touch');
   const stat = touch ? 'might' : 'speed';
+  poseFrame(state, e, ranged ? e.F.throw : (e.F.atk ?? 2), 320);
+  const label = ranged ? `${def.name} (stone)` : def.name;
 
   const eases = [];
   if (!touch) eases.push({ label: 'shield', steps: 1 });
@@ -227,18 +253,19 @@ function enemyStrike(state, e, def) {
   const audit = resolveTask({ base: def.level, eases, hinders, rng: state.rng, impaired: isImpaired(p) });
 
   if (audit.success) {
-    feedLine(state, `def ${def.name} — ${die(audit)} vs ${audit.target} · evaded`, PALETTE.cyan);
+    feedLine(state, `def ${label} — ${die(audit)} vs ${audit.target} · evaded`, PALETTE.cyan);
     if (audit.special.tier === '20') { e.stunUntil = state.t + 1500; feedLine(state, `you turn it aside — the ${def.name} reels`, PALETTE.goldGlow); }
     return;
   }
 
-  // hit taken — phase-lunge ignores Armor (Appendix REQUIRED)
-  const ignoresArmor = def.special.includes('phase_lunge');
+  // hit taken — phase-lunge ignores Armor (Appendix REQUIRED); a thrown stone
+  // always finds a gap for at least 1 (harassment, not artillery)
+  const ignoresArmor = !ranged && def.special.includes('phase_lunge');
   const armor = ignoresArmor ? 0 : Math.max(0, p.armor - p.armorPenalty);
-  const dmg = Math.max(0, def.damage - armor);
+  const dmg = ranged ? Math.max(1, def.ranged.damage - armor) : Math.max(0, def.damage - armor);
   applyDamage(p, dmg);
   sfx.hurt(); shake(state, 2, 130); flash(state, PALETTE.blood, 150);
-  feedLine(state, `def ${def.name} — ${die(audit)} vs ${audit.target} · HIT for ${dmg}${ignoresArmor ? ' (thru Armor)' : ''}`, PALETTE.blood);
+  feedLine(state, `def ${label} — ${die(audit)} vs ${audit.target} · HIT for ${dmg}${ignoresArmor ? ' (thru Armor)' : ''}`, PALETTE.blood);
 
   if (intrusionTriggered(state, audit)) creatureIntrusion(state, e, def);
 }

@@ -53,6 +53,7 @@ export function spawnExploreEntities(rng) {
         uid: uid++, kind: 'creature', creatureId: cid, sprite: def.sprite,
         x: ex, y: ey, hp: def.hp, maxHp: def.hp, alive: true, group: p.id, zone: p.zone,
         home: { x: p.x + 0.5, y: p.y + 0.5 }, aggro: def.aggro, engaged: false,
+        worldH: def.worldH ?? 1, F: def.F || {},
       });
     });
 
@@ -65,7 +66,7 @@ export function spawnExploreEntities(rng) {
   return entities;
 }
 
-/** Live (alive & visible) creatures. */
-export const liveCreatures = (state) => state.entities.filter((e) => e.kind === 'creature' && e.alive && !e.hidden);
+/** Renderable creatures — the dead stay as corpses (Morrowind leaves bodies). */
+export const liveCreatures = (state) => state.entities.filter((e) => e.kind === 'creature' && !e.hidden);
 /** Collectable pickups currently visible. */
 export const visiblePickups = (state) => state.entities.filter((e) => e.kind === 'pickup' && !e.hidden && !e.taken);

@@ -111,46 +111,241 @@ function glyph(ctx, x, y, s, color, idx) {
   ctx.stroke();
 }
 
-// --- sprite recipes (silhouette + outline + glint; phase frames @50% alpha) ---
+// --- creature sprite art -------------------------------------------------------
+// Hand-designed pixel art, drawn at HALF resolution (32×32; boss 32×48) and
+// integer-upscaled ×2 for chunky texels. Solid creatures get an automatic 1px
+// (→2px final) void outline; the abykos stays outline-free — it's made of static.
 
-/** Draw a body silhouette centered in a wxh frame with a 2px outline. */
-function silhouette(ctx, w, h, fill, drawPath, alpha = 1) {
-  ctx.save();
-  ctx.globalAlpha = alpha;
-  ctx.fillStyle = fill;
-  ctx.strokeStyle = P.void; ctx.lineWidth = 2;
-  ctx.beginPath(); drawPath(ctx, w, h); ctx.closePath();
-  ctx.fill(); ctx.stroke();
-  ctx.restore();
+function px(ctx, x, y, w, h, col) { ctx.fillStyle = col; ctx.fillRect(x, y, w, h); }
+function poly(ctx, pts, col) {
+  ctx.fillStyle = col; ctx.beginPath();
+  pts.forEach(([x, y], i) => (i ? ctx.lineTo(x, y) : ctx.moveTo(x, y)));
+  ctx.closePath(); ctx.fill();
 }
-const blob = (cx, cy, rx, ry) => (ctx) => ctx.ellipse(cx, cy, rx, ry, 0, 0, Math.PI * 2);
+function scatter(ctx, rnd, n, x, y, w, h, col) {
+  ctx.fillStyle = col;
+  for (let i = 0; i < n; i++) ctx.fillRect(x + (rnd() * w) | 0, y + (rnd() * h) | 0, 1, 1);
+}
 
-function creatureSprite(ctx, frame, w, h, bodyFill, frameNames) {
-  const name = frameNames[frame] || 'idle';
-  const bob = name === 'idle' ? (frame % 2) * 2 : 0;
-  const alpha = name === 'phase' ? 0.5 : 1;
-  const fill = name === 'dead' || name === 'death' ? P.rustDeep
-    : name === 'hit' ? P.blood : bodyFill;
-  const cy = h - 18 + bob - (name === 'lunge' ? 4 : 0);
-  silhouette(ctx, w, h, name === 'phase' ? P.staticWhite : fill,
-    blob(w / 2, cy, w / 3, h / 3.2), alpha);
-  if (name === 'dead' || name === 'death') { // toppled marker
-    ctx.strokeStyle = P.void; ctx.beginPath();
-    ctx.moveTo(w * 0.3, h - 6); ctx.lineTo(w * 0.7, h - 6); ctx.stroke();
+/** Draw at half-res via `art(hctx)`, outline the silhouette, upscale ×2 into ctx. */
+function pixelSprite(ctx, w, h, art, { outline = true } = {}) {
+  const hw = w / 2, hh = h / 2;
+  const tmp = makeCanvas(hw, hh);
+  art(tmp.getContext('2d'));
+  ctx.imageSmoothingEnabled = false;
+  if (outline) {
+    const sil = makeCanvas(hw, hh);
+    const s = sil.getContext('2d');
+    s.drawImage(tmp, 0, 0);
+    s.globalCompositeOperation = 'source-in';
+    s.fillStyle = P.void; s.fillRect(0, 0, hw, hh);
+    for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+      ctx.drawImage(sil, 0, 0, hw, hh, dx * 2, dy * 2, w, h);
+    }
+  }
+  ctx.drawImage(tmp, 0, 0, hw, hh, 0, 0, w, h);
+}
+
+// LAAK — palm-sized six-legged lizard, moss body, rust back-speckle (32×32 grid).
+function laakArt(c, f, rnd) {
+  const name = ['idleA', 'idleB', 'lunge', 'hit', 'dead'][f];
+  if (name === 'dead') {
+    px(c, 8, 26, 17, 4, P.rustDeep);               // flattened body
+    px(c, 9, 25, 14, 2, P.moss);
+    poly(c, [[25, 27], [30, 25], [30, 29], [25, 30]], P.rustDeep); // head flopped
+    for (let i = 0; i < 3; i++) px(c, 11 + i * 4, 22, 1, 3, P.rustDeep); // legs up
+    px(c, 4, 27, 4, 1, P.rustDeep);                // limp tail
+    return;
+  }
+  const lu = name === 'lunge', hit = name === 'hit';
+  const bob = name === 'idleB' ? 1 : 0;
+  const bx = lu ? 6 : 9, by = 21 + bob - (lu ? 2 : 0);
+  // tail (whip, curls opposite on idleB)
+  poly(c, [[bx, by + 3], [bx - 6, by + (name === 'idleB' ? 5 : 1)], [bx - 7, by + (name === 'idleB' ? 6 : 2)], [bx, by + 5]], P.moss);
+  // body — low slab, lunge stretches it
+  px(c, bx, by, lu ? 19 : 15, 5, P.moss);
+  px(c, bx, by + 4, lu ? 19 : 15, 2, P.boneShadow);      // belly
+  scatter(c, rnd, 8, bx, by, lu ? 18 : 14, 3, P.rust);   // back speckle
+  if (hit) px(c, bx + 3, by - 1, 9, 2, P.blood);         // welt
+  // head — flat wedge, jaw opens on lunge
+  const hx = bx + (lu ? 19 : 15);
+  poly(c, [[hx, by], [hx + 6, by + (lu ? -1 : 1)], [hx + 6, by + 3], [hx, by + 4]], P.moss);
+  if (lu) poly(c, [[hx + 2, by + 3], [hx + 7, by + 5], [hx + 2, by + 5]], P.rustDeep); // open jaw
+  px(c, hx + 4, by + 1, 1, 1, P.goldGlow);               // eye
+  // six legs — three near (moss), three far (darker), splayed when lunging
+  for (let i = 0; i < 3; i++) {
+    const lx = bx + 2 + i * 5 + (name === 'idleB' ? 1 : 0);
+    px(c, lx + 1, by + 5, 1, 2, P.cyanDeep);             // far leg
+    px(c, lx + (lu ? -1 : 0), by + 5, 1, lu ? 4 : 3, P.moss); // near leg
+    px(c, lx + (lu ? -2 : -1), by + 7 + (lu ? 1 : 0), 2, 1, P.moss); // foot
   }
 }
 
+// BROKEN HOUND — wrong-jointed dog, steel hide, cyan light in the seams (32×32).
+function houndArt(c, f, rnd) {
+  const name = ['idleA', 'idleB', 'phase', 'lunge', 'hit', 'dead'][f];
+  if (name === 'dead') {
+    px(c, 6, 24, 20, 5, P.deepSteel);                 // collapsed heap
+    px(c, 8, 22, 12, 3, P.steel);
+    poly(c, [[24, 25], [31, 23], [30, 27], [24, 28]], P.deepSteel); // head down
+    px(c, 10, 29, 8, 1, P.steel);                     // sprawled leg
+    px(c, 12, 24, 1, 1, P.cyanDeep); px(c, 18, 23, 1, 1, P.cyanDeep); // dead seams
+    return;
+  }
+  const phase = name === 'phase';
+  const lu = name === 'lunge', hit = name === 'hit';
+  const bob = name === 'idleB' ? 1 : 0;
+  const body = phase ? P.staticWhite : P.steel;
+  const dark = phase ? P.staticWhite : P.deepSteel;
+  if (phase) c.globalAlpha = 0.5;
+
+  const tilt = lu ? -4 : 0;                            // lunge rears up-forward
+  const by = 12 + bob + (hit ? 2 : 0);
+  // torso — gaunt slab, hips higher than shoulders (wrongness)
+  poly(c, [[7, by + 4], [24, by + tilt], [25, by + 6 + tilt], [9, by + 10]], body);
+  px(c, 8, by + 8, 14, 2, dark);                       // underbelly shadow
+  // neck + head low and forward, jaw underslung
+  const hx = lu ? 27 : 24, hy = by + tilt + (lu ? -2 : 2);
+  poly(c, [[hx - 4, hy], [hx + 6, hy + 2], [hx + 5, hy + 6], [hx - 3, hy + 5]], dark);
+  if (lu || hit) poly(c, [[hx + 2, hy + 5], [hx + 7, hy + 8], [hx + 1, hy + 7]], P.blood); // jaw open
+  px(c, hx + 2, hy + 2, 2, 1, phase ? P.staticWhite : P.cyan); // eye slit
+  // legs — reverse-kneed zigzags; lunge extends the front pair
+  const legs = [
+    [10, 0], [14, 1], // hind pair
+    [20, lu ? 3 : 0], [23, lu ? 4 : 1], // front pair
+  ];
+  for (const [lx, ext] of legs) {
+    const ky = by + 10;
+    px(c, lx, ky, 2, 3, body);                         // thigh
+    px(c, lx + 1, ky + 2, 2, 2, dark);                 // WRONG joint (juts back)
+    px(c, lx + 2 + ext, ky + 4, 2, 4, body);           // shin, extended on lunge
+    px(c, lx + 2 + ext, ky + 8, 3, 1, dark);           // toes
+  }
+  // cyan light leaking from the seams (spine + joints); flickers between idles
+  if (!phase) {
+    const seam = name === 'idleB' ? 1 : 0;
+    for (let i = 0; i < 5; i++) px(c, 9 + i * 3 + seam, by + 1 + ((i * 7) % 3) - (lu ? Math.round(i * 0.8) : 0), 1, 1, P.cyan);
+    px(c, 12, by + 12, 1, 1, P.cyan); px(c, 22, by + 12, 1, 1, P.cyan);
+    if (hit) { scatter(c, rnd, 6, 8, by, 16, 8, P.cyan); px(c, 10, by + 2, 10, 2, P.blood); }
+  } else {
+    scatter(c, rnd, 10, 4, 8, 26, 18, P.staticWhite);  // dissolving static
+  }
+  c.globalAlpha = 1;
+}
+
+// MURDEN — hunched raven-headed abhuman, mauve rags, gold eye (32×32).
+function murdenArt(c, f, rnd) {
+  const name = ['idleA', 'idleB', 'throw', 'snatch', 'hit', 'dead'][f];
+  if (name === 'dead') {
+    poly(c, [[7, 29], [10, 23], [22, 22], [26, 29]], P.mauve);   // crumpled rag pile
+    px(c, 8, 27, 17, 2, P.rustDeep);
+    poly(c, [[20, 22], [24, 15], [26, 16], [23, 23]], P.deepSteel); // beak jutting up
+    scatter(c, rnd, 5, 9, 24, 14, 4, P.boneShadow);              // spilled feathers
+    return;
+  }
+  const sway = name === 'idleB' ? 1 : 0;
+  const th = name === 'throw', sn = name === 'snatch', hit = name === 'hit';
+  const lean = sn ? 4 : th ? -2 : 0;
+  // stick legs, backward knees
+  px(c, 13, 24, 2, 3, P.boneShadow); px(c, 12, 27, 2, 3, P.boneShadow); px(c, 12, 29, 3, 1, P.deepSteel);
+  px(c, 18, 24, 2, 3, P.boneShadow); px(c, 19, 27, 2, 3, P.boneShadow); px(c, 19, 29, 3, 1, P.deepSteel);
+  // hunched cloak of rags — ragged hem
+  poly(c, [
+    [10 + lean, 12 + sway], [21 + lean, 9 + sway], [24 + lean / 2, 16], [23, 22],
+    [20, 24], [17, 22], [14, 25], [11, 22], [9, 24], [8, 17],
+  ], P.mauve);
+  px(c, 10 + lean, 14 + sway, 4, 6, P.rustDeep);                 // rag shadow
+  scatter(c, rnd, 6, 10, 13, 12, 9, P.deepSteel);                // feather texture
+  if (hit) { px(c, 12, 13, 9, 3, P.blood); scatter(c, rnd, 6, 8, 8, 18, 8, P.boneShadow); } // burst feathers
+  // raven head — deepSteel, long beak, gold-glow eye
+  const hx = 19 + lean, hy = 6 + sway - (sn ? 2 : 0);
+  poly(c, [[hx - 3, hy + 2], [hx + 4, hy], [hx + 5, hy + 5], [hx - 2, hy + 7]], P.deepSteel);
+  poly(c, [[hx + 4, hy + 2], [hx + 12 + (sn ? 2 : 0), hy + 4], [hx + 4, hy + 5]], P.boneShadow); // beak
+  px(c, hx + 2, hy + 2, 1, 1, P.goldGlow);                       // the eye
+  // arms: throw = cocked overhead with a stone · snatch = raking claw forward
+  if (th) {
+    px(c, hx - 2, hy - 4, 2, 6, P.mauve);                        // raised arm
+    px(c, hx - 1, hy - 7, 4, 4, P.staticWhite);                  // the stone
+    px(c, hx, hy - 6, 2, 2, P.steelLight);
+  } else if (sn) {
+    px(c, hx + 2, hy + 8, 8, 2, P.mauve);                        // reaching arm
+    for (let i = 0; i < 3; i++) px(c, hx + 10, hy + 7 + i * 2, 2, 1, P.boneShadow); // claws
+  } else {
+    px(c, 11 + sway, 16, 2, 5, P.mauve);                         // tucked arm
+    px(c, 11 + sway, 21, 2, 2, P.boneShadow);                    // claw tips
+  }
+}
+
+// ABYKOS — translucent humanoid of static, 64×96 (32×48 grid). No outline;
+// it isn't quite there. Gold converges inward on drain; static bursts on hit.
+function abykosArt(c, f, rnd) {
+  const name = ['idleA', 'idleB', 'drain', 'touch', 'hit', 'deathA', 'deathB'][f];
+  const sway = name === 'idleB' ? 1 : 0;
+  const CX = 16;
+
+  if (name === 'deathB') { // almost gone: a loose column of motes + a fading core
+    scatter(c, rnd, 22, 8, 6, 16, 36, P.staticWhite);
+    c.globalAlpha = 0.5; px(c, CX - 1, 12, 2, 22, P.staticWhite); c.globalAlpha = 1;
+    px(c, CX, 18, 1, 6, P.cyan);
+    return;
+  }
+
+  c.globalAlpha = 0.55;
+  const gap = name === 'deathA' ? 3 : 0;               // body shearing into bands
+  const bodyCol = P.staticWhite;
+  // head — a dim rounded orb
+  px(c, CX - 2 + sway, 3, 4, 6, bodyCol);
+  px(c, CX - 3 + sway, 4, 6, 4, bodyCol);
+  // torso — a figure of horizontal static bands: ragged widths, jitter, dropouts.
+  // It shouldn't read as flesh; it reads as bad signal.
+  for (let i = 0; i < 13; i++) {
+    if (!gap && i > 1 && (i * 7 + 3) % 5 === 0) continue;          // signal dropouts
+    const w = 12 - Math.floor(i * 0.55) + ((i * 5) % 3) - 1;       // ragged taper
+    const jit = ((i * 11) % 3) - 1;                                // horizontal noise
+    const off = gap ? ((i % 2) ? gap : -gap) : (name === 'hit' && i % 3 === 1 ? 99 : 0);
+    if (off === 99) continue;                                      // hit: torn bands
+    px(c, CX - w / 2 + sway + jit + off, 10 + i * 2, w, 1, bodyCol);
+    if ((i * 13) % 4 !== 0) px(c, CX - w / 2 + sway + jit + off + 1, 11 + i * 2, w - 2, 1, bodyCol);
+  }
+  // arms — thin, broken segments (never a solid limb)
+  const seg = (x, y, dx, dy, n) => { for (let i = 0; i < n; i++) if (i % 3 !== 2) px(c, x + dx * i, y + dy * i, 2, 2, bodyCol); };
+  if (name === 'drain') {
+    seg(CX - 7, 13, -2, -1, 5); seg(CX + 5, 13, 2, -1, 5);         // spread wide, rising
+  } else if (name === 'touch') {
+    seg(CX + 4, 14, 3, 0, 4);                                      // reaching out
+    px(c, CX + 14, 11, 4, 6, bodyCol);                             // the open hand
+    seg(CX - 6, 13, -1, 2, 4);
+  } else {
+    seg(CX - 7 + sway, 12, 0, 3, 4); seg(CX + 6 + sway, 12, 0, 3, 4);
+  }
+  // lower body dissolves into falling motes
+  for (let i = 0; i < 10; i++) {
+    const yy = 34 + i + ((i * 13) % 4);
+    px(c, CX - 4 + ((i * 7) % 9) + sway, yy, 1, 2, bodyCol);
+  }
+  c.globalAlpha = 1;
+
+  // bright core seam + inner cyan static (always shimmering)
+  px(c, CX + sway, 10, 1, 20, P.staticWhite);
+  scatter(c, rnd, 14, CX - 6 + sway, 8, 12, 28, P.cyan);
+  px(c, CX - 2 + sway, 5, 1, 1, P.cyan); px(c, CX + 1 + sway, 5, 1, 1, P.cyan); // eyes
+
+  if (name === 'drain') { // gold light pulled inward from the edges
+    for (let i = 0; i < 10; i++) {
+      const a = (i / 10) * Math.PI * 2;
+      const r = 12 + (i % 3) * 2;
+      px(c, Math.round(CX + Math.cos(a) * r), Math.round(20 + Math.sin(a) * r * 0.9), 1, 1, P.goldGlow);
+      px(c, Math.round(CX + Math.cos(a) * (r - 5)), Math.round(20 + Math.sin(a) * (r - 5) * 0.9), 1, 1, P.gold);
+    }
+  }
+  if (name === 'hit') scatter(c, rnd, 18, 2, 4, 28, 34, P.staticWhite); // static burst
+}
+
 const SPRITE_DRAW = {
-  laak: (ctx, f) => creatureSprite(ctx, f, 64, 64, P.moss, ['idle', 'idle', 'lunge', 'hit', 'dead']),
-  hound: (ctx, f) => creatureSprite(ctx, f, 64, 64, P.steelLight, ['idle', 'idle', 'phase', 'lunge', 'hit', 'dead']),
-  murden: (ctx, f) => creatureSprite(ctx, f, 64, 64, P.mauve, ['idle', 'idle', 'throw', 'snatch', 'hit', 'dead']),
-  abykos: (ctx, f) => {
-    // translucent static humanoid, taller frame
-    creatureSprite(ctx, f, 64, 96, P.staticWhite, ['idle', 'idle', 'drain', 'touch', 'hit', 'death', 'death']);
-    ctx.save(); ctx.globalAlpha = 0.4; ctx.fillStyle = P.cyan;
-    for (let i = 0; i < 30; i++) ctx.fillRect((Math.random() * 64) | 0, 20 + (Math.random() * 60) | 0, 1, 1);
-    ctx.restore();
-  },
+  laak: (ctx, f, rnd) => pixelSprite(ctx, 64, 64, (c) => laakArt(c, f, rnd)),
+  hound: (ctx, f, rnd) => pixelSprite(ctx, 64, 64, (c) => houndArt(c, f, rnd), { outline: f !== 2 }), // no outline mid-phase
+  murden: (ctx, f, rnd) => pixelSprite(ctx, 64, 64, (c) => murdenArt(c, f, rnd)),
+  abykos: (ctx, f, rnd) => pixelSprite(ctx, 64, 96, (c) => abykosArt(c, f, rnd), { outline: false }),
   pickup_cypher: (ctx, f) => glintPickup(ctx, P.gold, f),
   pickup_oddity: (ctx) => glintPickup(ctx, P.cyan, 0),
   pickup_shins: (ctx) => {
@@ -159,7 +354,8 @@ const SPRITE_DRAW = {
     ctx.strokeStyle = P.void; ctx.strokeRect(23, 39, 20, 14);
   },
   artifact_key: (ctx, f) => {
-    silhouette(ctx, 64, 64, P.gold, (c) => { c.rect(28, 20, 8, 30); });          // shaft
+    ctx.fillStyle = P.void; ctx.fillRect(26, 18, 12, 34);                        // outline plate
+    ctx.fillStyle = P.gold; ctx.fillRect(28, 20, 8, 30);                         // shaft
     ctx.fillStyle = P.cyan; ctx.fillRect(24, 16, 4, 10); ctx.fillRect(36, 16, 4, 10); // tuning-fork crown
     if (f % 2) { ctx.fillStyle = P.goldGlow; ctx.fillRect(30, 46, 4, 4); }
   },

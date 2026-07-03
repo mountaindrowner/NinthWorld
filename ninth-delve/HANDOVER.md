@@ -477,3 +477,36 @@ wanted later, a Morrowind-shaped option: XP buys rest-slot refresh at rests.
 Verified headless (seed 6): suite PASS · climb crossed via background rolls
 (mode never left EXPLORE) · examine resolved in-menu with feed line · zero
 errors. dice.js itself is untouched — it IS the background engine.
+
+## 2026-07-03 — Enemy design pass (all four Whisperlock creatures)
+The placeholder blobs are gone. Every creature now has hand-designed procedural
+pixel art (drawn at half-res in code, ×2 integer upscale, auto void outline,
+palette-locked) with the FULL Asset-doc §3 frame sets, plus per-creature
+realtime behavior so each plays differently:
+- **Laak** (5 frames, worldH 0.45 — ankle-high): moss body, rust back-speckle,
+  six legs, whip tail, gold eye; open-jaw lunge; belly-up corpse. Behavior:
+  **skitters** — zigzag approach (sine wobble perpendicular to its charge).
+- **Broken hound** (6 frames, worldH 0.9): gaunt steel hide, hips higher than
+  shoulders, reverse-kneed legs, cyan light in the seams (flickers between
+  idles), underslung jaw; 50%-alpha static-white **phase** frame shows whenever
+  it's inside a wall cell mid-chase. Collapsed-heap corpse with dead seams.
+- **Murden** (6 frames, worldH 1.05): hunched mauve rag-cloak (ragged hem),
+  raven head, long beak, gold-glow eye, feather texture. Behavior: **skirmisher**
+  — new `ranged` stat throws stones from ≤8 tiles (bg defense roll; a stone
+  always finds a gap for min 1 dmg), and it BACKS AWAY if you close, knifing
+  (snatch pose) only when cornered. Crumpled-rags corpse, beak jutting up.
+- **Abykos** (7 frames, 64×96, worldH 1.5 — it looms): a figure of horizontal
+  static bands — ragged widths, jitter, signal dropouts — bright core seam,
+  inner cyan static, broken-segment arms. Drain frame spreads its arms with
+  gold pulled inward (timed drain now poses it + 'drain' popup); hit frame
+  tears bands out; death shears the bands apart, then a fading mote column.
+- **Corpses persist** (Morrowind leaves bodies): dead creatures render their
+  final frame forever; death pose plays ~450ms first. Frame indices live in
+  `CREATURES[].F` (incl. `atk` pose per creature) and ride each entity.
+- Dev tool: `?sprites=1` renders the full labeled frame gallery.
+Fixed en route: artifact_key still referenced the deleted `silhouette` helper.
+Verified headless (seed 8): suite PASS · laak killed → corpse remains · murden
+threw stones (`def murden (stone) — d20 3 vs 6 · HIT for 1`) from a 3-pack that
+kept its distance · abykos drain tick posed + fed at +4s · zero errors.
+Balance note: stones (min 1 through Armor) slightly raise murden pressure vs the
+Appendix "1 after Armor" line — consistent, but watch it in human playtests.
