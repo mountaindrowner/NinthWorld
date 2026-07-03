@@ -7,7 +7,7 @@
 import { renderSolidAt, wallTextureKey, doorSlide } from '../game/world.js';
 import { visiblePickups, liveCreatures } from '../game/entities.js';
 import { PALETTE } from './texgen.js';
-import { BUF_W, BUF_H } from './screen.js';
+import { VIEW_W as BUF_W, VIEW_H as BUF_H, RENDER_SCALE } from './screen.js';
 
 const HORIZON = BUF_H / 2;
 const TEX = 64;
@@ -147,11 +147,12 @@ function renderSprites(ctx, state, assets, dirX, dirY, planeX, planeY) {
     if (e.kind === 'creature' && e.hp < e.maxHp && e.alive) {
       const cx = Math.round(screenX);
       if (cx >= 0 && cx < BUF_W && tY < zBuffer[cx]) {
-        const bw = Math.max(10, Math.min(28, spriteW * 0.6));
-        const bx = Math.round(screenX - bw / 2), byy = Math.round(topY - 5);
-        ctx.fillStyle = PALETTE.void; ctx.fillRect(bx - 1, byy - 1, bw + 2, 4);
+        const S2 = RENDER_SCALE;
+        const bw = Math.max(10 * S2, Math.min(28 * S2, spriteW * 0.6));
+        const bx = Math.round(screenX - bw / 2), byy = Math.round(topY - 5 * S2);
+        ctx.fillStyle = PALETTE.void; ctx.fillRect(bx - S2, byy - S2, bw + 2 * S2, 4 * S2);
         ctx.fillStyle = PALETTE.blood;
-        ctx.fillRect(bx, byy, Math.max(1, Math.round(bw * (e.hp / e.maxHp))), 2);
+        ctx.fillRect(bx, byy, Math.max(1, Math.round(bw * (e.hp / e.maxHp))), 2 * S2);
       }
     }
   }
@@ -165,7 +166,8 @@ function renderPopups(ctx, state, dirX, dirY, planeX, planeY) {
   const p = state.player;
   const invDet = 1 / (planeX * dirY - dirX * planeY);
   state.popups = state.popups.filter((pop) => state.t - pop.t0 < 900);
-  ctx.font = '8px monospace'; ctx.textAlign = 'center';
+  const S = RENDER_SCALE;
+  ctx.font = `${8 * S}px monospace`; ctx.textAlign = 'center';
   for (const pop of state.popups) {
     const sx = pop.x - p.x, sy = pop.y - p.y;
     const tX = invDet * (dirY * sx - dirX * sy);
@@ -174,10 +176,10 @@ function renderPopups(ctx, state, dirX, dirY, planeX, planeY) {
     const cx = Math.round((BUF_W / 2) * (1 + tX / tY));
     if (cx < 0 || cx >= BUF_W || tY >= zBuffer[cx]) continue;
     const age = (state.t - pop.t0) / 900;
-    const yy = Math.round(HORIZON - (BUF_H / tY) * 0.35 - age * 14);
+    const yy = Math.round(HORIZON - (BUF_H / tY) * 0.35 - age * 14 * S);
     ctx.globalAlpha = 1 - age * 0.7;
     ctx.fillStyle = PALETTE.void;
-    for (const [ox, oy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) ctx.fillText(pop.txt, cx + ox, yy + oy);
+    for (const [ox, oy] of [[S, 0], [-S, 0], [0, S], [0, -S]]) ctx.fillText(pop.txt, cx + ox, yy + oy);
     ctx.fillStyle = pop.color;
     ctx.fillText(pop.txt, cx, yy);
     ctx.globalAlpha = 1;

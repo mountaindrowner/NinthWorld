@@ -537,3 +537,18 @@ Built this session:
 Verified headless (seed 8): suite PASS · gallery renders all 38 frames · back-
 view murden + side hound confirmed in-world · combat log dice-free (regex
 checked) · prompts render · zero errors.
+
+## 2026-07-03 — Sharper retro: 3× render resolution (1152×648)
+Mark's call after the engine discussion: bump internal res "double or triple".
+Implemented split-resolution rendering: the world raycasts at
+BUF×RENDER_SCALE (`?res=1..4`, default **3 = 1152×648**) while ALL UI keeps
+drawing in the 384×216 logical space via a ctx.scale transform (no UI layout
+changes). Display now fills the screen with fractional upscale at res≥2
+(integer-only kept for ?res=1 purity). Input mapping adjusted (client px →
+logical space through scale×RENDER_SCALE). Raycaster's in-world text/bars
+(popups, health bars) scale with RENDER_SCALE.
+Benchmarked headless (software renderer, 1920×1080): res1/2/3 = 60fps,
+res4 = 42fps → default 3. Suite PASS, no errors.
+Note: at 3× the 64×64 wall texel grain becomes the visible quality floor —
+higher-res or hand-made textures are the next visual lever (or the Babylon
+migration, which Mark has approved in principle pending final Q&A).

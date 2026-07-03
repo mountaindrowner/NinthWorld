@@ -22,7 +22,7 @@ import { drawReport } from './ui/report.js';
 import { drawTouchControls } from './ui/touch.js';
 import { text as uiText } from './ui/widgets.js';
 
-import { BUF_W, BUF_H } from './engine/screen.js';
+import { BUF_W, BUF_H, VIEW_W, VIEW_H, RENDER_SCALE } from './engine/screen.js';
 const MOVE_FWD = 4, MOVE_STRAFE = 3, TURN_RATE = 2.5, MOUSE_SENS = 0.0022;
 
 const params = new URLSearchParams(location.search);
@@ -34,20 +34,28 @@ const screen = document.getElementById('screen');
 const view = screen.getContext('2d');
 view.imageSmoothingEnabled = false;
 
+// The buffer is VIEW-sized (sharper-retro world render); UI draws inside a
+// scale(RENDER_SCALE) transform so all layout stays in 384×216 logical space.
 const buffer = document.createElement('canvas');
-buffer.width = BUF_W; buffer.height = BUF_H;
+buffer.width = VIEW_W; buffer.height = VIEW_H;
 const buf = buffer.getContext('2d');
 buf.imageSmoothingEnabled = false;
+const uiPush = () => { buf.save(); buf.scale(RENDER_SCALE, RENDER_SCALE); buf.imageSmoothingEnabled = false; };
 
-let scale = 1, offX = 0, offY = 0;
+let scale = 1, offX = 0, offY = 0; // scale = screen px per VIEW px
 function resize() {
   screen.width = window.innerWidth;
   screen.height = window.innerHeight;
-  scale = Math.max(1, Math.floor(Math.min(screen.width / BUF_W, screen.height / BUF_H)));
-  offX = ((screen.width - BUF_W * scale) / 2) | 0;
-  offY = ((screen.height - BUF_H * scale) / 2) | 0;
+  // Fill the screen. At res 1 keep pure integer scaling (the chunky look);
+  // at higher render scales the texels are fine enough that fractional
+  // upscale doesn't visibly shimmer, and letterboxing would waste the screen.
+  scale = Math.min(screen.width / VIEW_W, screen.height / VIEW_H);
+  if (RENDER_SCALE === 1) scale = Math.max(1, Math.floor(scale));
+  offX = ((screen.width - VIEW_W * scale) / 2) | 0;
+  offY = ((screen.height - VIEW_H * scale) / 2) | 0;
   view.imageSmoothingEnabled = false;
-  input.viewport = { scale, offX, offY };
+  // input maps client px → logical 384×216 UI space
+  input.viewport = { scale: scale * RENDER_SCALE, offX, offY };
 }
 window.addEventListener('resize', resize);
 
@@ -239,9 +247,10 @@ function loop(now) {
   for (const e of state.entities) if (e.frameUntil && state.t > e.frameUntil) { e.frame = null; e.frameUntil = 0; }
   if (state.mode === 'REPORT' && !state.endTime) state.endTime = state.t;
 
-  if (modeAtStart === 'GALLERY') { drawGallery(); finishFrame(now); return; }
+  if (modeAtStart === 'GALLERY') { uiPush(); drawGallery(); finishFrame(now); return; }
 
   if (modeAtStart === 'TITLE') {
+    uiPush();
     drawTitle();
     if (clicks.length || keys.includes('Enter') || keys.includes('KeyE') || keys.includes('Space')) startDelve();
     finishFrame(now); return;
@@ -256,6 +265,7 @@ function loop(now) {
   }
 
   renderView(buf, state, assets);
+  uiPush(); // everything below draws in 384×216 logical space
   if (state.mode === 'EXPLORE') { drawViewmodel(); drawCrosshair(); drawTutorial(); }
   drawHud(buf, state, assets);
   drawRollFeed();
@@ -300,11 +310,13 @@ function finishFrame(now) {
   }
   uiText(buf, `${fps} fps`, BUF_W - 4, 9, { color: PALETTE.cyan, align: 'right' });
 
+  buf.restore(); // end logical UI space
+
   // shake-offset blit
   let sx = offX, sy = offY;
-  if (state.t < state.fx.shakeUntil) { const m = state.fx.mag * scale; sx += ((rng() * 2 - 1) * m) | 0; sy += ((rng() * 2 - 1) * m) | 0; }
+  if (state.t < state.fx.shakeUntil) { const m = state.fx.mag * scale * RENDER_SCALE; sx += ((rng() * 2 - 1) * m) | 0; sy += ((rng() * 2 - 1) * m) | 0; }
   view.fillStyle = PALETTE.void; view.fillRect(0, 0, screen.width, screen.height);
-  view.drawImage(buffer, 0, 0, BUF_W, BUF_H, sx, sy, BUF_W * scale, BUF_H * scale);
+  view.drawImage(buffer, 0, 0, VIEW_W, VIEW_H, sx, sy, VIEW_W * scale, VIEW_H * scale);
 
   frames++;
   if (now - fpsClock >= 500) { fps = Math.round((frames * 1000) / (now - fpsClock)); frames = 0; fpsClock = now; }

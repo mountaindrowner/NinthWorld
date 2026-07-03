@@ -17,8 +17,9 @@ session can run and reason about every line").
 ## The renderer (the part research keeps asking about)
 A **hand-rolled software raycaster** — the doc-recommended "path 1":
 - Lodev-style DDA grid raycast, one ray per screen column
-- Draws into an offscreen **Canvas 2D** buffer at **384×216** (16:9), then
-  integer-upscales with `image-rendering: pixelated` (chunky retro texels)
+- Draws into an offscreen **Canvas 2D** buffer; world renders at **1152×648**
+  by default (`?res=1..4`; UI stays in a 384×216 logical space), upscaled to
+  fill the window. Holds 60fps at res 3 even on software rendering
 - **Not WebGL.** Plain 2D canvas `drawImage`/`fillRect` calls; runs 60fps
 - Textured walls (64×64, per-zone), distance fog to a palette void color,
   per-side shading, sliding doors (animated texture offset)
@@ -27,9 +28,10 @@ A **hand-rolled software raycaster** — the doc-recommended "path 1":
   heading), world-anchored damage popups, health bars
 - Floor/ceiling are gradient fills (textured floor-casting = known future item)
 - The simulation layer (map grid, entities, combat) is **renderer-agnostic**;
-  `render()` is designed to be swappable. **Babylon.js is earmarked** as the
-  target if/when we need true 3D (e.g. a surface world) — decided 2026-07-03
-  after reviewing the Phaser research.
+  `render()` is designed to be swappable. **Babylon.js migration is approved
+  in principle by Mark (2026-07-03)** — enemies stay billboard sprites in 3D;
+  zero-dep rule relaxes to "vendored libraries OK, still no build step".
+  Sharper-retro (3× render res) shipped as the interim step.
 
 ## Everything else (also hand-rolled, all working)
 - **Game rules:** Cypher System (Numenera) resolution engine — pure seedable
