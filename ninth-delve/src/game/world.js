@@ -6,12 +6,13 @@ import {
   MAP, MAP_W, MAP_H, CELL, PLACEMENTS, ZONES, MURALS, DOORS,
 } from '../data/map_whisperlock.js';
 import { ODDITIES, ARTIFACT } from '../data/cyphers_oddities.js';
-import { awardXP, logEvent, overLimit, requestWhisper } from './state.js';
+import { awardXP, logEvent, overLimit, requestWhisper, feedLine } from './state.js';
 import { visiblePickups } from './entities.js';
 import { applyDamage } from './player.js';
-import { openTray } from '../ui/dicetray.js';
+import { resolveTask } from './dice.js';
 import { tableIntrusion, scriptedIntrusion, queueScripted } from './intrusions.js';
 import { sfx } from '../engine/audio.js';
+import { PALETTE } from '../engine/texgen.js';
 
 const N4 = [[1, 0], [-1, 0], [0, 1], [0, -1]];
 const keyOf = (x, y) => y * MAP_W + x;
@@ -229,20 +230,22 @@ export function startClimb(state) {
 
 function climbRolls(state) {
   const p = state.player;
-  const climbSpec = (label) => ({
-    label, base: 4, stat: 'might',
-    eases: [{ label: 'trained climbing', steps: 1 }],
-    hinders: state.climbPenalty ? [{ label: 'crumbling hold', steps: 1 }] : [],
-  });
-  openTray(state, climbSpec('climb down (Might)'), (a) => {
-    if (!a.success) { applyDamage(p, 3); logEvent(state, 'You slip on the descent — 3 damage.'); return; }
-    tableIntrusion(state, { zone: 'Z4' }); // the wandering-intrusion roll
-    openTray(state, climbSpec('climb up (Might)'), (b) => {
-      if (!b.success) { applyDamage(p, 3); logEvent(state, 'You lose your grip on the ascent — 3 damage.'); return; }
-      p.crossing = true; state.climbPenalty = 0;
-      logEvent(state, 'You haul yourself up the far wall — the chasm is behind you.');
+  const roll = (label) => {
+    const audit = resolveTask({
+      base: 4,
+      eases: [{ label: 'trained climbing', steps: 1 }],
+      hinders: state.climbPenalty ? [{ label: 'crumbling hold', steps: 1 }] : [],
+      rng: state.rng,
     });
-  });
+    feedLine(state, `${label} — ${audit.auto ? 'auto' : `d20 ${audit.natural}`} vs ${audit.target} · ${audit.success ? 'made it' : 'SLIPPED'}`,
+      audit.success ? PALETTE.cyan : PALETTE.blood);
+    return audit.success;
+  };
+  if (!roll('climb down')) { applyDamage(p, 3); logEvent(state, 'You slip on the descent — 3 damage. Try again.'); return; }
+  tableIntrusion(state, { zone: 'Z4' }); // the wandering-intrusion roll
+  if (!roll('climb up')) { applyDamage(p, 3); logEvent(state, 'You lose your grip on the ascent — 3 damage. Try again.'); return; }
+  p.crossing = true; state.climbPenalty = 0;
+  logEvent(state, 'You haul yourself up the far wall — the chasm is behind you.');
 }
 
 function collectPickup(state, e) {

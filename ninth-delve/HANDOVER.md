@@ -458,3 +458,22 @@ feed line), no errors anywhere. Screenshot shows feed + viewmodel + HUD.
 Next: human playtest the feel (swing pacing, enemy speeds, drain cadence are all
 first-guess numbers in combat.js RT table). Then the "beautiful look" half of the
 Morrowind letter: textured floors/ceilings, better wall variety, lighting.
+
+## 2026-07-03 — Dice tray fully removed (user: "exactly like Morrowind")
+User directive: no interactive dice anywhere. `ui/dicetray.js` deleted; the ROLL
+mode is gone. Every remaining roll resolves in the background via `resolveTask`
+and reports to the roll feed:
+- **Chasm climb**: E at the edge → both Might climb rolls resolve instantly
+  (feed: `climb down — d20 X vs 9 · made it / SLIPPED`); a slip costs 3 and you
+  just press E again. Wandering Z4 intrusion still fires between rolls.
+- **Examine cypher**: the Exam button in the cypher menu resolves in place —
+  feed line + identified name updates live in the menu.
+- **Glyph intuit**: one background Intellect roll, clue reveals on success.
+What remains modal are CHOICES, not dice (intrusion accept/refuse, glyph
+rotation, pickups) — Morrowind pauses for those too.
+Casualty (flagged): the 1-XP reroll (Rules §6) lived on the tray and is gone.
+XP now spends nowhere in-run; it's score + intrusion currency. If a spend is
+wanted later, a Morrowind-shaped option: XP buys rest-slot refresh at rests.
+Verified headless (seed 6): suite PASS · climb crossed via background rolls
+(mode never left EXPLORE) · examine resolved in-menu with feed line · zero
+errors. dice.js itself is untouched — it IS the background engine.

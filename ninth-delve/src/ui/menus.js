@@ -1,13 +1,13 @@
-// Modal panels (Tech §5 MODAL state): pickup, secret, examine, intrusion, and
-// the glyph puzzle share this renderer. Encounter action menus live in
-// combat/dicetray. Each draw fn returns true when the modal is dismissed.
+// Modal panels (Tech §5 MODAL state): pickup, secret, intrusion, cypher list,
+// and the glyph puzzle share this renderer. These are choice screens; any dice
+// they need roll in the background (Morrowind rule: menus pause, dice never ask).
 
 import { PALETTE } from '../engine/texgen.js';
 import { panel, text, wrapText, button, bar } from './widgets.js';
 import { KAVE } from '../data/pregen_kave.js';
 import { useCypher, examineSpec, applyExamine } from '../game/cyphers.js';
-import { openTray } from './dicetray.js';
-import { logEvent, awardXP } from '../game/state.js';
+import { resolveTask } from '../game/dice.js';
+import { logEvent, awardXP, feedLine } from '../game/state.js';
 import { tableIntrusion } from '../game/intrusions.js';
 
 const GLYPH_SYM = ['◇', '△', '▽', '▣'];
@@ -32,7 +32,7 @@ export function drawCypherMenu(ctx, state, clicks, keys) {
     const name = c.identified ? `${c.trueName} (L${c.level})` : c.unidName;
     text(ctx, name, x + 8, ry + 10, { size: 8, color: c.identified ? PALETTE.goldGlow : PALETTE.boneLight });
     if (button(ctx, { x: x + w - 108, y: ry, w: 48, h: 14, label: 'Use', hotkey: `Digit${i + 1}` }, clicks, keys)) { closeCyphers(state); doUse(state, cm, i); return true; }
-    if (!c.identified && button(ctx, { x: x + w - 56, y: ry, w: 48, h: 14, label: 'Exam' }, clicks, keys)) { closeCyphers(state); doExamine(state, cm, i); return true; }
+    if (!c.identified && button(ctx, { x: x + w - 56, y: ry, w: 48, h: 14, label: 'Exam' }, clicks, keys)) { doExamine(state, i); return false; } // resolves in place
     ry += 20;
   }
   if (button(ctx, { x: x + w - 56, y: y + h - 20, w: 48, h: 14, label: 'Close', hotkey: 'Enter' }, clicks, keys)) { closeCyphers(state); return true; }
@@ -47,8 +47,13 @@ function doUse(state, cm, idx) {
   logEvent(state, useCypher(state, idx));
 }
 
-function doExamine(state, cm, idx) {
-  openTray(state, examineSpec(state, idx), (a) => logEvent(state, applyExamine(state, idx, a)));
+// Examining is one background Intellect roll (hindered — the Glaive's inability).
+function doExamine(state, idx) {
+  const spec = examineSpec(state, idx);
+  const audit = resolveTask({ base: spec.base, eases: spec.eases, hinders: spec.hinders, rng: state.rng });
+  feedLine(state, `examine — ${audit.auto ? 'auto' : `d20 ${audit.natural}`} vs ${audit.target} · ${audit.success ? 'understood' : 'a mystery'}`,
+    audit.success ? PALETTE.cyan : PALETTE.boneShadow);
+  logEvent(state, applyExamine(state, idx, audit));
 }
 
 /**
@@ -91,11 +96,13 @@ function glyphAttempt(state) {
 }
 
 function glyphIntuit(state) {
-  // Intellect task diff 4, hindered by the numenera inability (effective 5, target 15).
-  openTray(state, { label: 'intuit the glyphs (Intellect)', base: 4, eases: [], hinders: [{ label: 'numenera inability', steps: 1 }], stat: 'intellect' }, (a) => {
-    if (a.success) { state.glyph.intuited = true; logEvent(state, 'The pattern resolves behind your eyes.'); }
-    else logEvent(state, 'The glyphs stay meaningless.');
-  });
+  // Intellect task diff 4, hindered by the numenera inability (effective 5,
+  // target 15) — one background roll, reported in the feed.
+  const audit = resolveTask({ base: 4, eases: [], hinders: [{ label: 'numenera inability', steps: 1 }], rng: state.rng });
+  feedLine(state, `intuit glyphs — d20 ${audit.natural} vs ${audit.target} · ${audit.success ? 'SEEN' : 'nothing'}`,
+    audit.success ? PALETTE.goldGlow : PALETTE.boneShadow);
+  if (audit.success) { state.glyph.intuited = true; logEvent(state, 'The pattern resolves behind your eyes.'); }
+  else logEvent(state, 'The glyphs stay meaningless.');
 }
 
 /** Character sheet (Tab). Returns true when dismissed. */

@@ -18,7 +18,6 @@ import { render as renderView } from './engine/raycaster.js';
 import { createInput } from './engine/input.js';
 import { drawHud } from './ui/hud.js';
 import { drawModal, drawSheet, drawCypherMenu, drawGlyphPuzzle } from './ui/menus.js';
-import { updateTray, drawTray } from './ui/dicetray.js';
 import { drawReport } from './ui/report.js';
 import { drawTouchControls } from './ui/touch.js';
 import { text as uiText } from './ui/widgets.js';
@@ -213,8 +212,6 @@ function loop(now) {
     if (keys.includes('KeyF')) toggleAggression(state);
     if (keys.includes('Tab')) { state.mode = 'SHEET'; document.exitPointerLock?.(); input.clearBuffered(); }
     else if (keys.includes('KeyC')) { state.cypherMenu = { context: 'explore', ret: 'EXPLORE' }; state.mode = 'CYPHERS'; document.exitPointerLock?.(); input.clearBuffered(); }
-  } else if (modeAtStart === 'ROLL') {
-    updateTray(state, dt);
   }
 
   renderView(buf, state, assets);
@@ -229,8 +226,6 @@ function loop(now) {
       state.modal = null; state.prevMode = null; state.mode = back; input.clearBuffered();
       m.onResolve?.(m.result); // intrusion accept/refuse + continuations
     }
-  } else if (modeAtStart === 'ROLL' && state.mode === 'ROLL') {
-    drawTray(buf, state, clicks, keys, assets);
   } else if (modeAtStart === 'SHEET' && state.mode === 'SHEET') {
     if (drawSheet(buf, state, clicks, keys, assets)) { state.mode = 'EXPLORE'; input.clearBuffered(); }
   } else if (modeAtStart === 'GLYPH' && state.mode === 'GLYPH') {
