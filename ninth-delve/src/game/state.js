@@ -44,6 +44,7 @@ export function createGameState(rng, seed) {
       crossing: false,            // Gravity Nullifier (C3): chasm traversable
       nextDefenseHinder: false,   // hound phase-behind intrusion
     },
+    seen: new Set(),              // fog-of-war cells for the minimap
     discoveredZones: new Set(),   // XP-source dedup keys (via awardXP)
     visitedZones: new Set(),      // zones entered (discovery XP + scripted trigger)
     firedScripted: new Set(),     // scripted intrusions already shown

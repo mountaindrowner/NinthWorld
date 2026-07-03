@@ -10,10 +10,10 @@ export function openIntrusion(state, intr, cont) {
   state.prevMode = state.mode;
   state.mode = 'MODAL';
   state.modal = {
-    kind: 'intrusion', title: 'GM Intrusion', text: intr.text,
+    kind: 'intrusion', title: 'the world turns against you', text: intr.text,
     choices: [
-      { label: 'Accept +2 XP', value: 'accept', accent: undefined },
-      { label: 'Refuse −1 XP', value: 'refuse', disabled: state.player.xp <= 0 },
+      { label: 'Endure it  +2 XP', value: 'accept', accent: undefined },
+      { label: 'Defy it  −1 XP', value: 'refuse', disabled: state.player.xp <= 0 },
     ],
     onResolve: (result) => {
       if (result === 'accept') { intr.apply?.(state); state.player.xp += 2; logEvent(state, `Intrusion accepted (+2 XP): ${intr.label || intr.text}.`); }

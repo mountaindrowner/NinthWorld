@@ -25,7 +25,7 @@ export function drawReport(ctx, state, clicks, keys) {
     `Shins:            ${p.shins}`,
     `Foes felled:      ${s.kills}`,
     `True clear:       ${state.keyTaken ? 'yes — the Key is yours' : 'no'}`,
-    `Tier 2 progress:  ${Math.min(4, Math.floor(p.xp / 4))}/4 benefits`,
+    `Tier 2 progress:  ${Math.min(4, p.benefits || 0)}/4 benefits bought`,
   ];
   let ly = y + 40;
   for (const l of lines) { text(ctx, l, x + 12, ly, { size: 8, color: PALETTE.boneLight }); ly += 12; }

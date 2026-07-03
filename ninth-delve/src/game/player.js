@@ -97,3 +97,19 @@ export function recover(p, recoveryDef, rng) {
   p.restsUsed += 1;
   return { points, slot };
 }
+
+/**
+ * Tier advancement, bought at a rest for 4 XP (Rules §6: four benefits = next
+ * tier). Morrowind's "sleep to level," Numenera's math underneath.
+ * @param {'pool'|'edge'|'effort'|'weapon'} kind
+ * @returns {string} what changed, for the feed
+ */
+export function applyBenefit(state, kind, stat) {
+  const p = state.player;
+  p.benefits = (p.benefits || 0) + 1;
+  if (kind === 'pool') { p.poolMax[stat] += 4; p.pools[stat] += 4; return `your ${stat} deepens (+4)`; }
+  if (kind === 'edge') { p.edge[stat] += 1; return `your ${stat} edge sharpens (+1)`; }
+  if (kind === 'effort') { p.effort += 1; return 'you can push harder — heavy swings now spend deeper Effort'; }
+  if (kind === 'weapon') { p.weaponTrained = true; return 'sword training — your cuts come easier'; }
+  return '';
+}

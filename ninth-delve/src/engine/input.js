@@ -21,6 +21,7 @@ export const TOUCH_UI = {
     { id: 'interact', label: 'E', x: BUF_W - 56, y: BUF_H - 100, w: 52, h: 24 },
     { id: 'KeyC', label: 'Cy', x: BUF_W - 56, y: BUF_H - 128, w: 52, h: 24 },
     { id: 'Tab', label: 'Sheet', x: BUF_W - 56, y: BUF_H - 156, w: 52, h: 24 },
+    { id: 'KeyM', label: 'Map', x: BUF_W - 56, y: BUF_H - 184, w: 52, h: 24 },
   ],
 };
 const JOY_PX = 46; // screen px from stick origin for full deflection
@@ -62,7 +63,7 @@ export function createInput(canvas) {
     if (e.code === 'KeyF') { state._keys.push(e.code); return; }
     if (e.code === 'Escape') { state._keys.push('Escape'); return; }
     if (/^Digit[1-9]$/.test(e.code)) { state._keys.push(e.code); e.preventDefault(); return; }
-    if (e.code === 'KeyR' || e.code === 'KeyC') { state._keys.push(e.code); return; }
+    if (e.code === 'KeyR' || e.code === 'KeyC' || e.code === 'KeyM') { state._keys.push(e.code); return; }
     if (e.code === 'Tab') { state._keys.push('Tab'); e.preventDefault(); }
   });
   window.addEventListener('keyup', (e) => { if (HELD[e.code]) { state[HELD[e.code]] = false; e.preventDefault(); } });

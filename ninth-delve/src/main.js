@@ -3,13 +3,13 @@
 
 import { loadAssets, PALETTE } from './engine/texgen.js';
 import { makeRNG, resolveTask, specialOf } from './game/dice.js';
-import { createGameState, logEvent, awardXP, requestWhisper } from './game/state.js';
+import { createGameState, logEvent, awardXP, requestWhisper, feedLine as feedLine2 } from './game/state.js';
 import { initAudio, setZoneDrone, sfx } from './engine/audio.js';
 import { WHISPERS } from './data/whispers.js';
 import { spawnExploreEntities } from './game/entities.js';
-import { connectivityTest, moveWithCollision, updateDoors, interact, startClimb, zoneAt, tileDist, hasLOS, cellAt } from './game/world.js';
+import { connectivityTest, moveWithCollision, updateDoors, interact, startClimb, zoneAt, tileDist, hasLOS, cellAt, updateSeen } from './game/world.js';
 import { effortCost, applyDamage } from './game/player.js';
-import { updateCombat, playerSwing, tryRest, toggleAggression } from './game/combat.js';
+import { updateCombat, playerSwing, toggleAggression } from './game/combat.js';
 import { useCypher, drainRandomCypher } from './game/cyphers.js';
 import { pumpScripted, queueScripted, scriptedIntrusion } from './game/intrusions.js';
 import { CREATURES, armorVs } from './data/creatures.js';
@@ -17,8 +17,9 @@ import { CELL, MURALS } from './data/map_whisperlock.js';
 import { render as renderView } from './engine/raycaster.js';
 import { createInput } from './engine/input.js';
 import { drawHud } from './ui/hud.js';
-import { drawModal, drawSheet, drawCypherMenu, drawGlyphPuzzle } from './ui/menus.js';
+import { drawModal, drawSheet, drawCypherMenu, drawGlyphPuzzle, openRestMenu } from './ui/menus.js';
 import { drawReport } from './ui/report.js';
+import { drawMinimap, drawMapOverlay, objectiveText } from './ui/minimap.js';
 import { drawTouchControls } from './ui/touch.js';
 import { text as uiText } from './ui/widgets.js';
 
@@ -140,6 +141,9 @@ function updateExplore(dt) {
   updateCombat(state, dt);      // creature AI: aggro, chase, strike, leash
 
   exploreWorldEvents();
+  updateSeen(state);
+  const obj = objectiveText(state);
+  if (obj !== state.lastObjective) { state.lastObjective = obj; feedLine2(state, `goal — ${obj}`, PALETTE.goldGlow); }
   pumpScripted(state);          // fire any queued scripted intrusion when idle
 }
 
@@ -175,13 +179,13 @@ function drawViewmodel() {
   buf.restore();
 }
 
-/** Morrowind-style roll feed: the background dice, honestly reported. */
+/** Morrowind-style message log: bottom-left, newest nearest the HUD. */
 function drawRollFeed() {
   if (!state.rollFeed?.length) return;
-  let fy = 40;
-  for (const l of state.rollFeed) {
+  const vis = state.rollFeed.filter((l) => (state.t - l.t0) / 4500 <= 1);
+  let fy = BUF_H - 52 - (vis.length - 1) * 10;
+  for (const l of vis) {
     const age = (state.t - l.t0) / 4500;
-    if (age > 1) continue;
     buf.globalAlpha = Math.min(1, (1 - age) * 3);
     uiText(buf, l.txt, 4, fy, { color: l.color || PALETTE.boneLight });
     fy += 10;
@@ -259,15 +263,16 @@ function loop(now) {
 
   if (modeAtStart === 'EXPLORE') {
     updateExplore(dt);
-    if (keys.includes('KeyR')) tryRest(state);
+    if (keys.includes('KeyR')) { openRestMenu(state); input.clearBuffered(); }
     if (keys.includes('KeyF')) toggleAggression(state);
+    if (keys.includes('KeyM')) { state.mode = 'MAP'; document.exitPointerLock?.(); input.clearBuffered(); }
     if (keys.includes('Tab')) { state.mode = 'SHEET'; document.exitPointerLock?.(); input.clearBuffered(); }
     else if (keys.includes('KeyC')) { tut.cyMenu = true; state.cypherMenu = { context: 'explore', ret: 'EXPLORE' }; state.mode = 'CYPHERS'; document.exitPointerLock?.(); input.clearBuffered(); }
   }
 
   renderView(buf, state, assets);
   uiPush(); // everything below draws in 384×216 logical space
-  if (state.mode === 'EXPLORE') { drawViewmodel(); drawCrosshair(); drawTutorial(); }
+  if (state.mode === 'EXPLORE') { drawViewmodel(); drawCrosshair(); drawTutorial(); drawMinimap(buf, state); }
   drawHud(buf, state, assets);
   drawRollFeed();
   if (state.mode === 'EXPLORE' && input.touchActive) drawTouchControls(buf, input);
@@ -282,6 +287,8 @@ function loop(now) {
     if (drawSheet(buf, state, clicks, keys, assets)) { state.mode = 'EXPLORE'; input.clearBuffered(); }
   } else if (modeAtStart === 'GLYPH' && state.mode === 'GLYPH') {
     if (drawGlyphPuzzle(buf, state, clicks, keys)) { state.mode = 'EXPLORE'; input.clearBuffered(); }
+  } else if (modeAtStart === 'MAP' && state.mode === 'MAP') {
+    if (drawMapOverlay(buf, state, clicks, keys, input.touchActive)) { state.mode = 'EXPLORE'; input.clearBuffered(); }
   } else if (modeAtStart === 'CYPHERS' && state.mode === 'CYPHERS') {
     drawCypherMenu(buf, state, clicks, keys);
   } else if (state.mode === 'REPORT') {
@@ -293,8 +300,8 @@ function loop(now) {
 
 /** Whisper box + hit-flash + fps + shake-offset blit + frame accounting. */
 function finishFrame(now) {
-  // environmental whisper text box (top center), fading out
-  if (state.whisper && state.t < state.whisper.until) {
+  // environmental whisper text box (top center), fading out — hidden under the map
+  if (state.mode !== 'MAP' && state.whisper && state.t < state.whisper.until) {
     const remain = (state.whisper.until - state.t) / 5500;
     buf.globalAlpha = Math.min(1, remain * 3);
     buf.fillStyle = PALETTE.deepSteel; buf.fillRect(20, 6, BUF_W - 40, 22);

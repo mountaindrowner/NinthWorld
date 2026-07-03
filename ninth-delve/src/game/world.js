@@ -167,6 +167,32 @@ export function facingLabel(angle) {
 export const tileDist = (x1, y1, x2, y2) => Math.hypot(x1 - x2, y1 - y2);
 
 /**
+ * Fog-of-war memory for the minimap: mark cells the player can currently see
+ * (radius ~3.6, LOS-checked; walls count if their near face is visible).
+ */
+export function updateSeen(state) {
+  const p = state.player;
+  const px = Math.floor(p.x), py = Math.floor(p.y);
+  const seen = (state.seen ||= new Set());
+  for (let dy = -4; dy <= 4; dy++) {
+    for (let dx = -4; dx <= 4; dx++) {
+      if (Math.hypot(dx, dy) > 4.2) continue;
+      const x = px + dx, y = py + dy;
+      if (x < 0 || y < 0 || x >= MAP_W || y >= MAP_H) continue;
+      const k = keyOf(x, y);
+      if (seen.has(k)) continue;
+      if (Math.abs(dx) <= 1 && Math.abs(dy) <= 1) { seen.add(k); continue; }
+      // aim at a point pulled toward the player so wall faces register
+      const cx = x + 0.5, cy = y + 0.5;
+      const vx = cx - p.x, vy = cy - p.y;
+      const len = Math.hypot(vx, vy) || 1;
+      const t = Math.max(0, (len - 0.7) / len);
+      if (hasLOS(state, p.x, p.y, p.x + vx * t, p.y + vy * t)) seen.add(k);
+    }
+  }
+}
+
+/**
  * Line-of-sight between two points: march the segment; blocked by any wall or
  * closed door/lock (Tech §4). Chasm and open doors don't block sight.
  */

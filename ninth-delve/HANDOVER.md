@@ -666,3 +666,35 @@ Mark's playtest notes (he plays on a phone!) addressed:
 Verified headless: classic ?test=1 green · 3D zero errors · phone context:
 stick walk (22.5→20.4), look-drag pitch −0.18 (LOOKING UP), hold-ATK produced
 a heavy swing. Screenshots: overhead chop mid-cut w/ damage popup; new menus.
+
+## 2026-07-03 — Minimap · map-as-journal tutorial · rest/train XP · UI finesse
+Mark's four notes ("minimap is essential / a tutorial on what to do / UI
+needs finessing / the XP pop-ups aren't great — marry Cypher+Numenera into
+a Morrowind RPG") addressed, both builds:
+- **Fog-of-war minimap** (new src/ui/minimap.js + world.updateSeen +
+  state.seen): corner map top-right in explore shows only cells you've had
+  line of sight to — walls steel, doors gold, chasm cyan, exit glowing;
+  pickups you've seen glint; cyan arrow = you. M (or the touch Map button)
+  opens the full map overlay.
+- **Map overlay doubles as the journal/tutorial**: seen-map + GOAL (staged
+  objective: find gallery → warrens clue → set glyphs → face the core →
+  escape) + THE RULES OF THIS WORLD (cypher limit, discovery XP, rest/train)
+  + HANDS (controls, touch-aware). Objective changes also ping the message
+  feed ("goal — …") so the player is never lost.
+- **Numenera-into-Morrowind leveling**: R now opens a rest menu —
+  Rest (recovery, 3/day) or Train (4 XP), Morrowind's "sleep to level" over
+  Numenera's actual tier math: each 4-XP lesson buys one of the four tier
+  benefits — Pool +4 (pick stat), Edge +1 (pick stat), Effort (heavy swings
+  can now spend 2 levels), or sword training (eases every cut). Delve Report
+  shows "Tier 2 progress: n/4 benefits bought" (player.applyBenefit).
+- **Diegetic intrusions**: the modal is now "the world turns against you" /
+  Endure it (+2 XP) / Defy it (−1 XP) — same math, no GM jargon.
+- **UI finesse**: message feed moved to bottom-left (Morrowind's spot) and
+  hidden while menus are open; whisper box hides under the map; Escape backs
+  out of any choice modal; choice-button labels trimmed to fit.
+Verified headless (script: scratchpad/verify_minimap.mjs): classic ?test=1
+green · fog populates on walk in both builds · M opens/closes map · R→Train→
+Pool→Might deducts 4 XP, Might max 14→18, benefits 0→1, feed shows "your
+might deepens (+4)" · zero page errors. Screenshots reviewed.
+Next: Mark to playtest on phone (fps number top-right still wanted); then
+creature reskin pass (Numenera IP names) per docs/07 open items.

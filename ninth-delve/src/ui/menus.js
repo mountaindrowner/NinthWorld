@@ -9,6 +9,8 @@ import { useCypher, examineSpec, applyExamine } from '../game/cyphers.js';
 import { resolveTask } from '../game/dice.js';
 import { logEvent, awardXP, feedLine } from '../game/state.js';
 import { tableIntrusion } from '../game/intrusions.js';
+import { inCombat } from '../game/combat.js';
+import { recover, applyBenefit } from '../game/player.js';
 
 const GLYPH_SYM = ['◇', '△', '▽', '▣'];
 
@@ -144,18 +146,19 @@ export function drawModal(ctx, state, clicks, keys) {
   cy = wrapText(ctx, m.text || '', x + 10, cy, w - 20, 11, { size: 8, color: PALETTE.boneLight });
   if (m.sub) cy = wrapText(ctx, m.sub, x + 10, cy + 4, w - 20, 11, { size: 8, color: PALETTE.rust });
 
-  // Choice buttons (e.g. intrusion accept/refuse); else a single Continue.
+  // Choice buttons (e.g. intrusion endure/defy); else a single Continue.
   if (m.choices && m.choices.length) {
     let bx = x + 10;
     for (let i = 0; i < m.choices.length; i++) {
       const c = m.choices[i];
-      const bw = Math.min(96, (w - 20) / m.choices.length - 4);
+      const bw = Math.min(96, Math.floor((w - 20) / m.choices.length) - 4);
       if (button(ctx, { x: bx, y: y + h - 22, w: bw, h: 16, label: c.label, hotkey: `Digit${i + 1}`, disabled: c.disabled, accent: c.accent }, clicks, keys)) {
         m.result = c.value;
         return true;
       }
       bx += bw + 4;
     }
+    if (keys.includes('Escape')) { m.result = undefined; return true; }
     return false;
   }
 
@@ -163,4 +166,75 @@ export function drawModal(ctx, state, clicks, keys) {
   // also dismiss on any interact key
   if (keys.includes('KeyE') || keys.includes('Space')) return true;
   return false;
+}
+
+// --- rest & training (Morrowind's "sleep to level," Numenera's four benefits) --
+export function openRestMenu(state) {
+  if (inCombat(state)) { feedLine(state, 'no rest — something hunts you', PALETTE.rust); return; }
+  const canRest = state.player.restsUsed < 3;
+  const canTrain = state.player.xp >= 4;
+  state.prevMode = 'EXPLORE';
+  state.mode = 'MODAL';
+  document.exitPointerLock?.();
+  state.modal = {
+    kind: 'rest', title: 'a moment of stillness',
+    text: 'The halls hold their breath. Mend the body, or turn what you have learned into strength.',
+    sub: 'training costs 4 XP — four lessons make a tier',
+    choices: [
+      { label: 'Rest', value: 'rest', disabled: !canRest },
+      { label: 'Train', value: 'train', disabled: !canTrain, accent: PALETTE.goldGlow },
+      { label: 'Leave', value: 'leave' },
+    ],
+    onResolve: (v) => {
+      if (v === 'rest') {
+        const r = recover(state.player, KAVE.recovery, state.rng);
+        state.player.armorPenalty = 0;
+        feedLine(state, `you rest — recovered ${r.points}`, PALETTE.cyan);
+        logEvent(state, `You rest. +${r.points} points.`);
+      } else if (v === 'train') {
+        openTrainMenu(state);
+      }
+    },
+  };
+}
+
+function openTrainMenu(state) {
+  const p = state.player;
+  state.prevMode = 'EXPLORE';
+  state.mode = 'MODAL';
+  state.modal = {
+    kind: 'train', title: 'training — toward the second tier',
+    text: `${p.xp} XP held. Four lessons make a tier. What does Kave hone?`,
+    choices: [
+      { label: 'Pool +4', value: 'pool' },
+      { label: 'Edge +1', value: 'edge' },
+      { label: 'Effort', value: 'effort', disabled: p.effort >= 2 },
+      { label: 'Sword', value: 'weapon', disabled: !!p.weaponTrained },
+    ],
+    onResolve: (kind) => {
+      if (!kind) return;
+      if (kind === 'pool' || kind === 'edge') { openStatPick(state, kind); return; }
+      p.xp -= 4; p.xpSpent += 4;
+      feedLine(state, applyBenefit(state, kind), PALETTE.goldGlow);
+    },
+  };
+}
+
+function openStatPick(state, kind) {
+  state.prevMode = 'EXPLORE';
+  state.mode = 'MODAL';
+  state.modal = {
+    kind: 'train', title: kind === 'pool' ? 'deepen which pool?' : 'sharpen which edge?',
+    text: kind === 'pool' ? 'Four points, permanently.' : 'Every action of that kind costs less of you.',
+    choices: [
+      { label: 'Might', value: 'might' },
+      { label: 'Speed', value: 'speed' },
+      { label: 'Intellect', value: 'intellect' },
+    ],
+    onResolve: (stat) => {
+      if (!stat) return;
+      state.player.xp -= 4; state.player.xpSpent += 4;
+      feedLine(state, applyBenefit(state, kind, stat), PALETTE.goldGlow);
+    },
+  };
 }

@@ -59,8 +59,9 @@ export function playerSwing(state, heavy = false) {
   // Effort on the heavy swing — costs Might, eases the roll. Free if broke.
   let effortLevels = 0;
   if (heavy) {
-    const cost = effortCost(1, { edge: p.edge.might, impaired: isImpaired(p) });
-    if (p.pools.might > cost && payCost(p, 'might', cost)) effortLevels = 1;
+    const lv = Math.min(p.effort, 2); // trained Effort deepens the heavy cut
+    const cost = effortCost(lv, { edge: p.edge.might, impaired: isImpaired(p) });
+    if (p.pools.might > cost && payCost(p, 'might', cost)) effortLevels = lv;
     else feedLine(state, 'too drained for a heavy swing', PALETTE.rust);
   }
 
@@ -69,6 +70,7 @@ export function playerSwing(state, heavy = false) {
 
   const def = CREATURES[target.creatureId];
   const eases = [];
+  if (p.weaponTrained) eases.push('skill');
   if (p.aggression) eases.push('Aggr');
   if (state.t < (p.stimUntil || 0)) eases.push('Stim');
   const audit = resolveTask({
