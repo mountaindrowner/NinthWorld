@@ -17,10 +17,10 @@ import { BUF_W, BUF_H } from './screen.js';
 // on the right half is look-drag. Hit rects (x/y/w/h) are deliberately larger
 // than the drawn shapes — thumbs are imprecise. HUD top = BUF_H−40.
 export const TOUCH_UI = {
-  joy: { cx: 48, cy: BUF_H - 68, r: 26 },  // ghost anchor; the live base floats to the thumb
+  joy: { cx: 48, cy: BUF_H - 48, r: 26 },  // ghost anchor; the live base floats to the thumb
   buttons: [
-    { id: 'swing', label: 'ATK', kind: 'circle', cx: BUF_W - 34, cy: BUF_H - 68, r: 17, x: BUF_W - 58, y: BUF_H - 92, w: 48, h: 48 },
-    { id: 'interact', label: 'E', kind: 'circle', cx: BUF_W - 36, cy: BUF_H - 114, r: 11, x: BUF_W - 54, y: BUF_H - 132, w: 36, h: 36 },
+    { id: 'swing', label: 'ATK', kind: 'circle', cx: BUF_W - 34, cy: BUF_H - 48, r: 17, x: BUF_W - 58, y: BUF_H - 72, w: 48, h: 48 },
+    { id: 'interact', label: 'E', kind: 'circle', cx: BUF_W - 36, cy: BUF_H - 94, r: 11, x: BUF_W - 54, y: BUF_H - 112, w: 36, h: 36 },
     { id: 'KeyM', label: 'Map', kind: 'tab', x: BUF_W - 96, y: 30, w: 30, h: 15 },
     { id: 'Tab', label: 'You', kind: 'tab', x: BUF_W - 64, y: 30, w: 30, h: 15 },
     { id: 'KeyC', label: 'Cy', kind: 'tab', x: BUF_W - 32, y: 30, w: 30, h: 15 },

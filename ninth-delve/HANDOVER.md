@@ -745,3 +745,24 @@ heavy swing, Map tab opens/Close closes, E button interacts, cypher badge —
 plus the desktop suite (?test=1 green, rest/train flow) — zero errors.
 Next: Mark's phone feel check (stick gain LOOK_GAIN 2.2 tunable, one
 constant in input.js); then creature reskin pass (docs/07).
+
+## 2026-07-04 — HUD minimalized (the bottom plate is gone)
+Mark: "the bottom bar takes up so much space... make it more minimal, like
+the screenshot." The full-width 40px Arena plate is deleted from both builds.
+New HUD (ui/hud.js rewrite, corners only):
+- Top-left: three slim 64×5 pool bars (blood/cyan/gold). A pool's numbers
+  appear ONLY while it's below max. Under them: tiny cypher-socket diamonds
+  (gold when filled, rust past the limit) + a small XP counter.
+- Damage-track word pulses under the stack only when not hale; over-limit
+  warning only when over.
+- Portrait, shins, compass, HALE label: cut from the HUD — all still in the
+  Sheet (Tab / You tab). Minimap arrow covers facing.
+- Event ticker: one dim line at the very bottom (centered on touch).
+- Touch layout reshuffled for the freed space: minimap now top-right UNDER
+  the icon tabs (size 54), thumb clusters dropped into the true corners
+  (stick + sword cy BUF_H−48, hand cy BUF_H−94), feed bottoms adjusted
+  (desktop BUF_H−16, touch BUF_H−92). Classic viewmodel sword now reaches
+  the frame bottom — more Morrowind.
+Verified headless: full touch suite + desktop suite + ?test=1 all green,
+zero errors, screenshots reviewed in both builds.
+Next: Mark's phone pass (feel + fps); creature reskin (docs/07).

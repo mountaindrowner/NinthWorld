@@ -202,7 +202,7 @@ function drawFeedAndFx() {
   if (state.mode === 'EXPLORE' && state.rollFeed?.length) {
     let vis = state.rollFeed.filter((l) => (state.t - l.t0) / 4500 <= 1);
     if (input.touchActive) vis = vis.slice(-4);
-    const bottom = input.touchActive ? BUF_H - 112 : BUF_H - 52;
+    const bottom = input.touchActive ? BUF_H - 92 : BUF_H - 16;
     let fy = bottom - (vis.length - 1) * 10;
     for (const l of vis) {
       const age = (state.t - l.t0) / 4500;
@@ -299,7 +299,7 @@ function frame() {
   if (state.mode === 'TITLE') { drawTitle(); drawFeedAndFx(); return; }
   if (state.mode === 'EXPLORE') { drawCrosshair(); drawTutorial(); drawMinimap(buf, state, input.touchActive); }
   drawWorldOverlays();
-  drawHud(buf, state, assets);
+  drawHud(buf, state, assets, input.touchActive);
   if (state.mode === 'EXPLORE' && input.touchActive) drawTouchControls(buf, input, state);
 
   if (modeAtStart === 'MODAL' && state.mode === 'MODAL') {

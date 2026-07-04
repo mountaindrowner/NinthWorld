@@ -58,10 +58,10 @@ function drawCells(ctx, state, x0, y0, cs, revealAll = false) {
   ctx.restore();
 }
 
-/** Corner minimap (always on in explore). Sits top-left on touch — the
- * right edge belongs to the thumb buttons there. */
+/** Corner minimap (always on in explore). Top-right; on touch it sits a bit
+ * smaller under the icon tabs (top-left belongs to the pool bars). */
 export function drawMinimap(ctx, state, touch) {
-  const size = 62, x0 = touch ? 6 : BUF_W - size - 6, y0 = 14;
+  const size = touch ? 54 : 62, x0 = BUF_W - size - 6, y0 = touch ? 48 : 14;
   ctx.globalAlpha = 0.75; ctx.fillStyle = PALETTE.void;
   ctx.fillRect(x0 - 2, y0 - 2, size + 4, size + 4);
   ctx.globalAlpha = 1;

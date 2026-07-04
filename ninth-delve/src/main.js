@@ -185,7 +185,7 @@ function drawRollFeed() {
   if (!state.rollFeed?.length) return;
   let vis = state.rollFeed.filter((l) => (state.t - l.t0) / 4500 <= 1);
   if (input.touchActive) vis = vis.slice(-4);
-  const bottom = input.touchActive ? BUF_H - 112 : BUF_H - 52;
+  const bottom = input.touchActive ? BUF_H - 92 : BUF_H - 16;
   let fy = bottom - (vis.length - 1) * 10;
   for (const l of vis) {
     const age = (state.t - l.t0) / 4500;
@@ -276,7 +276,7 @@ function loop(now) {
   renderView(buf, state, assets);
   uiPush(); // everything below draws in 384×216 logical space
   if (state.mode === 'EXPLORE') { drawViewmodel(); drawCrosshair(); drawTutorial(); drawMinimap(buf, state, input.touchActive); }
-  drawHud(buf, state, assets);
+  drawHud(buf, state, assets, input.touchActive);
   drawRollFeed();
   if (state.mode === 'EXPLORE' && input.touchActive) drawTouchControls(buf, input, state);
 
