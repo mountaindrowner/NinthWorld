@@ -311,6 +311,7 @@ function collectPickup(state, e) {
     awardXP(state, ARTIFACT.xp, 'artifact');
     requestWhisper(state, 'key');
     queueScripted(state, 'Z5'); // the Key sparks (fires after this modal closes)
+    wardenAlarm(state);         // stealing what it guards wakes the warden
     return { kind: 'pickup', title: ARTIFACT.name, text: ARTIFACT.text };
   }
   // oddity
@@ -318,6 +319,34 @@ function collectPickup(state, e) {
   p.oddities.push(e.oddity);
   if (odd.xp) awardXP(state, odd.xp, `oddity:${e.oddity}`);
   return { kind: 'pickup', title: odd.name, text: odd.text };
+}
+
+/**
+ * The Key IS what the warden guards: taking it is an alarm. If the abykos
+ * still lives and hasn't seen you (the chasm back route slips past its sight
+ * behind the arena columns), it phases to the thief and hunts. You don't have
+ * to kill it — you have to make the gate.
+ */
+function wardenAlarm(state) {
+  const warden = state.entities.find((c) => c.kind === 'creature' && c.creatureId === 'abykos' && c.alive && !c.hidden);
+  if (!warden || warden.engaged) return;
+  const p = state.player;
+  const clear = (x, y) => {
+    for (const [ox, oy] of [[-0.28, -0.28], [0.28, -0.28], [-0.28, 0.28], [0.28, 0.28]]) {
+      if (blockedAt(state, Math.floor(x + ox), Math.floor(y + oy))) return false;
+    }
+    return true;
+  };
+  for (let i = 0; i < 14; i++) {
+    const a = state.rng() * Math.PI * 2;
+    const nx = p.x + Math.cos(a) * 3, ny = p.y + Math.sin(a) * 3;
+    if (clear(nx, ny) && hasLOS(state, nx, ny, p.x, p.y)) { warden.x = nx; warden.y = ny; break; }
+  }
+  warden.engaged = true;
+  warden.nextDrain = state.t + 2500;
+  requestWhisper(state, 'boss');
+  feedLine(state, 'the Abykos of the Core answers the theft', PALETTE.rust);
+  logEvent(state, 'Something vast turns its attention to you.');
 }
 
 function revealSecret(state, x, y) {
