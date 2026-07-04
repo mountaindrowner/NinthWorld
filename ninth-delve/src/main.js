@@ -212,13 +212,13 @@ function tutPrompt() {
   const collected = p.shins > 5 || p.cyphers.length > 0 || p.oddities.length > 0;
   const touch = input.touchActive;
 
-  if (engaged && state.stats.kills === 0) return touch ? 'calibration: the sword button — swing' : 'calibration: click — swing your blade';
-  if (!touch && engaged && state.stats.kills >= 1 && !tut.heavy) return 'calibration: hold, then release — a heavier cut';
-  if (nearPickup && !collected) return touch ? 'calibration: the gold hand — take it' : 'calibration: E — take what you find';
-  if (p.cyphers.length > 0 && !tut.cyMenu) return touch ? 'calibration: the marked tab — your devices' : 'calibration: C — the devices you carry';
+  if (engaged && state.stats.kills === 0) return touch ? '◇ the sword button — swing' : '◇ click — swing your blade';
+  if (!touch && engaged && state.stats.kills >= 1 && !tut.heavy) return '◇ hold, then release — a heavier cut';
+  if (nearPickup && !collected) return touch ? '◇ the gold hand — take it' : '◇ E — take what you find';
+  if (p.cyphers.length > 0 && !tut.cyMenu) return touch ? '◇ the marked tab — your devices' : '◇ C — the devices you carry';
   const spawnDist = tileDist(p.x, p.y, 2.5, 22.5);
-  if (spawnDist < 2.5) return touch ? 'calibration: push the stick — walk' : 'calibration: W A S D — walk';
-  if (tut.looked < 1.2) return touch ? 'calibration: drag the view — look' : 'calibration: move the mouse — look';
+  if (spawnDist < 2.5) return touch ? '◇ push the stick — walk' : '◇ W A S D — walk';
+  if (tut.looked < 1.2) return touch ? '◇ drag the view — look' : '◇ move the mouse — look';
   return null;
 }
 
@@ -383,7 +383,7 @@ function drawTitle() {
   buf.fillStyle = PALETTE.gold; buf.font = '18px monospace'; buf.textAlign = 'center';
   buf.fillText('THE WHISPERLOCK', BUF_W / 2, 100);
   buf.fillStyle = PALETTE.boneShadow; buf.font = '8px monospace';
-  buf.fillText('the lock will calibrate you as you go', BUF_W / 2, 116);
+  buf.fillText('you woke with no name — the shard on your spine remembers this place', BUF_W / 2, 116);
   buf.fillStyle = PALETTE.cyan;
   if ((state.t / 600 | 0) % 2) buf.fillText('click, or press Enter, to delve', BUF_W / 2, 150);
   buf.fillStyle = PALETTE.boneShadow; buf.font = '8px monospace';

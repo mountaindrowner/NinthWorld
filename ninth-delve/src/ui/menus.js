@@ -3,7 +3,7 @@
 // they need roll in the background (Morrowind rule: menus pause, dice never ask).
 
 import { PALETTE } from '../engine/texgen.js';
-import { panel, text, wrapText, button, bar } from './widgets.js';
+import { panel, text, wrapText, wrapCount, button, bar } from './widgets.js';
 import { KAVE } from '../data/pregen_kave.js';
 import { useCypher, examineSpec, applyExamine } from '../game/cyphers.js';
 import { resolveTask } from '../game/dice.js';
@@ -144,7 +144,11 @@ export function drawSheet(ctx, state, clicks, keys, assets) {
 export function drawModal(ctx, state, clicks, keys) {
   const m = state.modal;
   if (!m) return true;
-  const w = 220, h = 110, x = (BUF_W - w) / 2, y = (BUF_H - h) / 2;
+  // height follows the text (the bonded shard can be talkative)
+  const w = 232;
+  const lines = wrapCount(ctx, m.text || '', w - 20) + (m.sub ? wrapCount(ctx, m.sub, w - 20) : 0);
+  const h = Math.max(104, Math.min(190, 62 + lines * 11 + (m.sub ? 4 : 0)));
+  const x = (BUF_W - w) / 2, y = (BUF_H - h) / 2;
   panel(ctx, x, y, w, h, m.title || m.kind);
 
   let cy = y + 26;

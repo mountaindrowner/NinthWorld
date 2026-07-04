@@ -141,13 +141,13 @@ function tutPrompt() {
   const nearPickup = state.entities.some((e) => e.kind === 'pickup' && !e.hidden && !e.taken && tileDist(p.x, p.y, e.x, e.y) < 2.2);
   const collected = p.shins > 5 || p.cyphers.length > 0 || p.oddities.length > 0;
   const touch = input.touchActive;
-  if (engaged && state.stats.kills === 0) return touch ? 'calibration: the sword button — swing' : 'calibration: click — swing your blade';
-  if (!touch && engaged && state.stats.kills >= 1 && !tut.heavy) return 'calibration: hold, then release — a heavier cut';
-  if (nearPickup && !collected) return touch ? 'calibration: the gold hand — take it' : 'calibration: E — take what you find';
-  if (p.cyphers.length > 0 && !tut.cyMenu) return touch ? 'calibration: the marked tab — your devices' : 'calibration: C — the devices you carry';
+  if (engaged && state.stats.kills === 0) return touch ? '◇ the sword button — swing' : '◇ click — swing your blade';
+  if (!touch && engaged && state.stats.kills >= 1 && !tut.heavy) return '◇ hold, then release — a heavier cut';
+  if (nearPickup && !collected) return touch ? '◇ the gold hand — take it' : '◇ E — take what you find';
+  if (p.cyphers.length > 0 && !tut.cyMenu) return touch ? '◇ the marked tab — your devices' : '◇ C — the devices you carry';
   const spawnDist = tileDist(p.x, p.y, 2.5, 22.5);
-  if (spawnDist < 2.5) return touch ? 'calibration: push the stick — walk' : 'calibration: W A S D — walk';
-  if (tut.looked < 1.2) return touch ? 'calibration: drag the view — look' : 'calibration: move the mouse — look';
+  if (spawnDist < 2.5) return touch ? '◇ push the stick — walk' : '◇ W A S D — walk';
+  if (tut.looked < 1.2) return touch ? '◇ drag the view — look' : '◇ move the mouse — look';
   return null;
 }
 function drawTutorial() {
@@ -170,7 +170,7 @@ function drawTitle() {
   buf.fillStyle = PALETTE.void; buf.fillRect(0, 0, BUF_W, BUF_H);
   buf.globalAlpha = 1;
   uiText(buf, 'THE WHISPERLOCK', BUF_W / 2, 96, { color: PALETTE.gold, size: 18, align: 'center' });
-  uiText(buf, 'the lock will calibrate you as you go', BUF_W / 2, 114, { color: PALETTE.boneShadow, align: 'center' });
+  uiText(buf, 'you woke with no name — the shard on your spine remembers this place', BUF_W / 2, 114, { color: PALETTE.boneShadow, align: 'center' });
   if ((state.t / 600 | 0) % 2) uiText(buf, 'click, or press Enter, to delve', BUF_W / 2, 150, { color: PALETTE.cyan, align: 'center' });
   uiText(buf, 'WASD move · mouse look (up & down!) · click swing, hold heavy · E take · C cyphers · Tab sheet', BUF_W / 2, 182, { color: PALETTE.boneShadow, align: 'center' });
 }
@@ -255,8 +255,8 @@ function autoPerf() {
   if (state.t < perfNextAt) return;
   perfNextAt = state.t + 2000;
   const f = scene3.engine.getFps();
-  if (f < 45 && perfLevel < 4) { perfLevel += 0.5; scene3.engine.setHardwareScalingLevel(perfLevel); }
-  else if (f > 57 && perfLevel > 2) { perfLevel -= 0.5; scene3.engine.setHardwareScalingLevel(perfLevel); }
+  if (f < 45 && perfLevel < 4) { perfLevel += 0.5; scene3.engine.setHardwareScalingLevel(perfLevel); if (perfLevel >= 3) scene3.setFxEnabled(false); }
+  else if (f > 57 && perfLevel > 2) { perfLevel -= 0.5; scene3.engine.setHardwareScalingLevel(perfLevel); if (perfLevel < 3) scene3.setFxEnabled(true); }
 }
 
 function frame() {

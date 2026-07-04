@@ -796,3 +796,32 @@ Verified headless (verify_logic.mjs + both regression suites re-run):
 Door-audit rule: every D cell must have solid flanks on exactly one axis.
 Old test scripts pre-seed tutSeen to stay isolated from the new popups.
 Next: Mark's phone pass; creature reskin (docs/07).
+
+## 2026-07-04 — The bonded shard (story tutorials) + Babylon toolbox
+Mark: frame tutorials as an AI cypher bonded to the player; simple amnesia
+story (the binding took their memories, the shard doesn't know them either);
+and research what Babylon tools/premade assets we can use.
+- **Story frame (tutorial.js rewrite)**: all 8 popups are now the bonded
+  shard speaking first-person — "I am a cypher... when you touched me, I
+  bound to you, and the binding took your memories. I am sorry." It teaches
+  combat/discovery/doors/cyphers/glyphs/chasm/training in its own voice
+  (calls XP "noticing", training "braiding"). Titles: '◇ the shard — ...'.
+  Passive cyan prompts now prefix '◇' (its short whispers) instead of
+  'calibration:'. Title screen: "you woke with no name — the shard on your
+  spine remembers this place". drawModal height is now adaptive
+  (widgets.wrapCount) so the shard can talk; benefits intrusions too.
+- **Babylon toolbox (docs/09_BABYLON_TOOLBOX.md)**: full brief for all
+  sessions. Key finding: babylonjs-materials / procedural-textures /
+  loaders / post-process ship per-feature UMD minis on npm — vendorable
+  one file at a time with zero build step. Vendored now: lavaMaterial,
+  fireMaterial, fireProceduralTexture, perlinNoise, glTF2 loader (224KB).
+- **Applied today**: chasm coolant bed is ALIVE — LavaMaterial fed by a
+  cyan-recolored FireProceduralTexture (falls back to flat emissive if the
+  vendor scripts are absent). Core-only mood pass: GlowLayer (emissives
+  bloom) + DefaultRenderingPipeline vignette + animated grain, FXAA off.
+  autoPerf disables glow/vignette/grain past scaling level 3 (weak phones).
+Verified headless: logic suite + touch suite green, LavaMaterial loads,
+zero page errors. SwiftShader too dark/slow to judge the lava visually —
+Mark's phone is the real test.
+Next: Mark judges lava/glow/grain on device; fireMaterial torches, god
+rays, water room queued in docs/09 §recommendations.

@@ -131,6 +131,27 @@ export function createScene3D(canvas, state, assets) {
         const bed = BABYLON.MeshBuilder.CreateGround('bed', { width: C, height: C }, scene);
         bed.position.set(wx(x) + C / 2, -depth, wz(y) - C / 2);
         const bm = matCache.bed || (matCache.bed = (() => {
+          // vendored materials library: living coolant — a slow lava shader fed
+          // by a fire noise recolored to the palette's cyans. Falls back to the
+          // flat emissive if the extension scripts aren't loaded.
+          if (BABYLON.LavaMaterial && BABYLON.FireProceduralTexture) {
+            const noise = new BABYLON.FireProceduralTexture('bednoise', 128, scene);
+            noise.fireColors = [
+              BABYLON.Color3.FromHexString(PALETTE.cyan),
+              BABYLON.Color3.FromHexString(PALETTE.staticWhite),
+              BABYLON.Color3.FromHexString(PALETTE.cyanDeep),
+              BABYLON.Color3.FromHexString(PALETTE.cyan),
+              BABYLON.Color3.FromHexString(PALETTE.cyanDeep),
+              BABYLON.Color3.FromHexString(PALETTE.cyan),
+            ];
+            const m = new BABYLON.LavaMaterial('bedm', scene);
+            m.noiseTexture = noise;
+            m.diffuseTexture = noise;
+            m.speed = 0.5;
+            m.unlit = true;
+            m.fogColor = BABYLON.Color3.FromHexString(PALETTE.void);
+            return m;
+          }
           const m = new BABYLON.StandardMaterial('bedm', scene);
           m.emissiveColor = BABYLON.Color3.FromHexString(PALETTE.cyanDeep);
           m.disableLighting = true; return m;
@@ -232,6 +253,25 @@ export function createScene3D(canvas, state, assets) {
   const cam = new BABYLON.FreeCamera('cam', new BABYLON.Vector3(0, EYE, 0), scene);
   cam.minZ = 0.05; cam.fov = 1.0;
   cam.inputs.clear(); // no Babylon controls; state.player drives everything
+
+  // --- mood pass (core Babylon): emissives bloom softly; vignette + animated
+  // grain give the retro image some grit. autoPerf turns these off on weak
+  // phones via setFxEnabled.
+  const glow = new BABYLON.GlowLayer('glow', scene, { mainTextureRatio: 0.5 });
+  glow.intensity = 0.55;
+  const pipe = new BABYLON.DefaultRenderingPipeline('mood', false, scene, [cam]);
+  pipe.fxaaEnabled = false; // never smooth the pixels
+  pipe.imageProcessingEnabled = true;
+  pipe.imageProcessing.vignetteEnabled = true;
+  pipe.imageProcessing.vignetteWeight = 2.4;
+  pipe.grainEnabled = true;
+  pipe.grain.intensity = 13;
+  pipe.grain.animated = true;
+  function setFxEnabled(on) {
+    glow.intensity = on ? 0.55 : 0;
+    pipe.imageProcessingEnabled = on;
+    pipe.grainEnabled = on;
+  }
 
   // --- creatures & pickups: directional billboards from the entity list ------
   const mgrCache = {};
@@ -402,5 +442,5 @@ export function createScene3D(canvas, state, assets) {
   let pixelLevel = 2;
   function cyclePixel() { pixelLevel = pixelLevel >= 3 ? 1 : pixelLevel + 1; engine.setHardwareScalingLevel(pixelLevel); }
 
-  return { engine, scene, cam, sync, project, cyclePixel };
+  return { engine, scene, cam, sync, project, cyclePixel, setFxEnabled };
 }

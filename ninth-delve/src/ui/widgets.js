@@ -56,6 +56,20 @@ export function wrapText(ctx, str, x, y, maxW, lineH, opts = {}) {
   return cy;
 }
 
+/** How many lines wrapText would use (same split rule), for sizing panels. */
+export function wrapCount(ctx, str, maxW, size = 8) {
+  if (!str) return 0;
+  ctx.font = `${size}px monospace`;
+  const words = str.split(' ');
+  let line = '', n = 0;
+  for (const w of words) {
+    const test = line ? `${line} ${w}` : w;
+    if (ctx.measureText(test).width > maxW && line) { n += 1; line = w; }
+    else line = test;
+  }
+  return line ? n + 1 : n;
+}
+
 const inside = (c, b) => c.x >= b.x && c.x <= b.x + b.w && c.y >= b.y && c.y <= b.y + b.h;
 
 /**
