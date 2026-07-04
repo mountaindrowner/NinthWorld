@@ -901,3 +901,34 @@ Deviations/Doc issues:
 Playtest notes: see pass-1 sweep results appended in the next entry.
 Next: read pass-1 sweep; iterate once more if the boss still folds < 8s or
 brave still exits > 60% pools; then commit + push.
+
+## 2026-07-04 (3) — Balance passes 2–3: the warden matters now
+Done (every change bot-driven; sweeps = 12 seeds × brave/careful):
+- **phase_touch** (flagged interpretation): the abykos's touch ignores armor
+  like the hound's required phase-lunge — with armor applied its 5 dmg landed
+  as a 2-pt tap and no sweep run was ever threatened.
+- **Creatures give up impossible chases** (2.5s no progress → disengage + 6s
+  no-aggro walk-off; the warden is exempt). Ends the hound hovering at the
+  chasm lip and the cross-gap broadsword plink (reach 2.2 vs their 1.1).
+- **Rests can't be chained** (8s settle between daily slots — the bot chained
+  all three in 0.3s mid-death-spiral).
+- **Chasm crumbling-hold penalty applies once**, not to every retry (expected
+  climb cost was ~15 Might for a side path; now ~6, per design intent).
+- **Taking the Key wakes the warden**: careful-bot found the chasm back route
+  enters the arena inside the columns' sight-shadow and could lift the Key
+  unseen. Kept the stealth entry (the flank is earned) but the theft is now an
+  alarm — the warden phases to the thief and hunts. Front door = brawl, back
+  door = heist + run for the gate.
+- Final sweep: brave 12/12 wins, dmg 5.1 avg, boss 5.5s; careful 12/12, dmg
+  10.4 (0–22 spread), poolLow 0.50 avg (worst 0.37), boss fight in EVERY run
+  (2.5–9.7s), rests 2.1. Zero deaths at bot-optimal play — humans will bleed
+  more; further tightening should come from a device playtest, not more bot
+  passes (bot optimality distorts beyond here).
+- Regression green: ?test=1, key-theft alarm, ascend→report in both builds.
+
+Deviations/Doc issues:
+- `phase_touch` on the abykos and the rest-settle timer are new mechanics
+  interpretations (this entry is the flag). Book stat lines untouched.
+
+Next: Mark device-playtests the tuned warden (front-route brawl + back-route
+heist), then decide if brave's ~5 dmg average needs a third pass.
