@@ -12,19 +12,23 @@ const HELD = {
 import { BUF_W, BUF_H } from './screen.js';
 
 // Touch layout in buffer coords (shared with ui/touch.js for drawing), anchored
-// to the buffer edges so it survives resolution changes. Left half is the move
-// stick; the right half (minus these buttons) is look-drag. HUD top = BUF_H−40.
+// to the buffer edges so it survives resolution changes. Two thumb clusters:
+// actions bottom-right (round), menus as small tabs top-right; everything else
+// on the right half is look-drag. Hit rects (x/y/w/h) are deliberately larger
+// than the drawn shapes — thumbs are imprecise. HUD top = BUF_H−40.
 export const TOUCH_UI = {
-  joy: { cx: 44, cy: BUF_H - 66, r: 26 },  // virtual stick base (visual)
+  joy: { cx: 48, cy: BUF_H - 68, r: 26 },  // ghost anchor; the live base floats to the thumb
   buttons: [
-    { id: 'swing', label: 'ATK', x: BUF_W - 56, y: BUF_H - 72, w: 52, h: 24 },
-    { id: 'interact', label: 'E', x: BUF_W - 56, y: BUF_H - 100, w: 52, h: 24 },
-    { id: 'KeyC', label: 'Cy', x: BUF_W - 56, y: BUF_H - 128, w: 52, h: 24 },
-    { id: 'Tab', label: 'Sheet', x: BUF_W - 56, y: BUF_H - 156, w: 52, h: 24 },
-    { id: 'KeyM', label: 'Map', x: BUF_W - 56, y: BUF_H - 184, w: 52, h: 24 },
+    { id: 'swing', label: 'ATK', kind: 'circle', cx: BUF_W - 34, cy: BUF_H - 68, r: 17, x: BUF_W - 58, y: BUF_H - 92, w: 48, h: 48 },
+    { id: 'interact', label: 'E', kind: 'circle', cx: BUF_W - 36, cy: BUF_H - 114, r: 11, x: BUF_W - 54, y: BUF_H - 132, w: 36, h: 36 },
+    { id: 'KeyM', label: 'Map', kind: 'tab', x: BUF_W - 96, y: 30, w: 30, h: 15 },
+    { id: 'Tab', label: 'You', kind: 'tab', x: BUF_W - 64, y: 30, w: 30, h: 15 },
+    { id: 'KeyC', label: 'Cy', kind: 'tab', x: BUF_W - 32, y: 30, w: 30, h: 15 },
   ],
 };
-const JOY_PX = 46; // screen px from stick origin for full deflection
+// Touch feel, in LOGICAL px so every phone behaves the same regardless of
+// screen size/scale: full stick deflection, look gain, and stick dead zone.
+const JOY_LOGICAL = 30, LOOK_GAIN = 2.2, DEAD = 0.15;
 
 /**
  * @param {HTMLCanvasElement} canvas
@@ -40,6 +44,8 @@ export function createInput(canvas) {
     touchActive: false,           // true once a touch is seen → analog move + on-screen UI
     analogX: 0, analogY: 0,       // virtual-stick vector (−1..1)
     knob: { x: 0, y: 0 },         // stick knob offset (buffer px) for drawing
+    joyBase: null,                // live stick base (buffer px) — floats to the thumb
+    heldIds: new Set(),           // touch buttons currently pressed (for drawing)
     _interact: false,             // edge: consumed by takeInteract()
     _clicks: [],                  // buffer-space {x,y}
     _keys: [],                    // buffer of pressed key codes for menus
@@ -106,11 +112,12 @@ export function createInput(canvas) {
       if (!state.wantPointerLock) { state._clicks.push(b); active.set(t.identifier, { role: 'tap' }); continue; }
       const btn = TOUCH_UI.buttons.find((r) => inRect(b, r));
       if (btn) {
-        if (btn.id === 'swing') { state.swingCharging = performance.now(); active.set(t.identifier, { role: 'swingBtn' }); }
-        else { fireButton(btn.id); active.set(t.identifier, { role: 'button' }); }
+        state.heldIds.add(btn.id);
+        if (btn.id === 'swing') { state.swingCharging = performance.now(); active.set(t.identifier, { role: 'swingBtn', btnId: btn.id }); }
+        else { fireButton(btn.id); active.set(t.identifier, { role: 'button', btnId: btn.id }); }
         continue;
       }
-      if (b.x < BUF_W / 2) { active.set(t.identifier, { role: 'move', ox: t.clientX, oy: t.clientY }); }
+      if (b.x < BUF_W / 2) { state.joyBase = b; active.set(t.identifier, { role: 'move', ox: t.clientX, oy: t.clientY }); }
       else { active.set(t.identifier, { role: 'look', prevX: t.clientX, prevY: t.clientY }); }
     }
     e.preventDefault();
@@ -121,12 +128,17 @@ export function createInput(canvas) {
       const a = active.get(t.identifier);
       if (!a) continue;
       if (a.role === 'move') {
-        state.analogX = Math.max(-1, Math.min(1, (t.clientX - a.ox) / JOY_PX));
-        state.analogY = Math.max(-1, Math.min(1, (t.clientY - a.oy) / JOY_PX));
-        state.knob = { x: state.analogX * TOUCH_UI.joy.r, y: state.analogY * TOUCH_UI.joy.r };
+        // deflection in logical px + radial dead zone → no drift, same feel on any phone
+        let ax = (t.clientX - a.ox) / state.viewport.scale / JOY_LOGICAL;
+        let ay = (t.clientY - a.oy) / state.viewport.scale / JOY_LOGICAL;
+        const len = Math.hypot(ax, ay);
+        if (len < DEAD) { ax = 0; ay = 0; }
+        else if (len > 1) { ax /= len; ay /= len; }
+        state.analogX = ax; state.analogY = ay;
+        state.knob = { x: ax * TOUCH_UI.joy.r, y: ay * TOUCH_UI.joy.r };
       } else if (a.role === 'look') {
-        state.yaw += (t.clientX - a.prevX); a.prevX = t.clientX;
-        state.pitch += (t.clientY - a.prevY); a.prevY = t.clientY; // phones can look up now
+        state.yaw += (t.clientX - a.prevX) / state.viewport.scale * LOOK_GAIN; a.prevX = t.clientX;
+        state.pitch += (t.clientY - a.prevY) / state.viewport.scale * LOOK_GAIN; a.prevY = t.clientY;
       }
     }
     e.preventDefault();
@@ -135,11 +147,12 @@ export function createInput(canvas) {
   const endTouch = (e) => {
     for (const t of e.changedTouches) {
       const a = active.get(t.identifier);
-      if (a && a.role === 'move') { state.analogX = 0; state.analogY = 0; state.knob = { x: 0, y: 0 }; }
+      if (a && a.role === 'move') { state.analogX = 0; state.analogY = 0; state.knob = { x: 0, y: 0 }; state.joyBase = null; }
       if (a && a.role === 'swingBtn') { // hold ATK = heavy swing, like the mouse
         state._swings.push({ heavy: performance.now() - state.swingCharging >= 350 });
         state.swingCharging = 0;
       }
+      if (a?.btnId) state.heldIds.delete(a.btnId);
       active.delete(t.identifier);
     }
     e.preventDefault();

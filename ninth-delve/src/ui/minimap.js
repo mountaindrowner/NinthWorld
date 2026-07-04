@@ -99,7 +99,7 @@ export function drawMapOverlay(ctx, state, clicks, keys, touch) {
 
   text(ctx, 'HANDS', cx, my + 126, { color: PALETTE.goldGlow });
   const ctl = touch
-    ? ['stick walks · drag looks', 'ATK tap cut · ATK hold heavy', 'E take · Cy devices · Map here']
+    ? ['stick walks · drag looks', 'sword tap cut · hold heavy', 'hand takes what glows gold', 'top tabs: map · you · devices']
     : ['WASD walk · mouse looks', 'click cut · hold click heavy', 'E take · C devices · R rest', 'F stance · M map · Tab sheet'];
   ctl.forEach((l, i) => text(ctx, l, cx, my + 136 + i * 10, { color: PALETTE.boneShadow }));
 

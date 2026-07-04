@@ -209,10 +209,10 @@ function tutPrompt() {
   const collected = p.shins > 5 || p.cyphers.length > 0 || p.oddities.length > 0;
   const touch = input.touchActive;
 
-  if (engaged && state.stats.kills === 0) return touch ? 'calibration: ATK — swing your blade' : 'calibration: click — swing your blade';
+  if (engaged && state.stats.kills === 0) return touch ? 'calibration: the sword button — swing' : 'calibration: click — swing your blade';
   if (!touch && engaged && state.stats.kills >= 1 && !tut.heavy) return 'calibration: hold, then release — a heavier cut';
-  if (nearPickup && !collected) return 'calibration: E — take what you find';
-  if (p.cyphers.length > 0 && !tut.cyMenu) return 'calibration: C — the devices you carry';
+  if (nearPickup && !collected) return touch ? 'calibration: the gold hand — take it' : 'calibration: E — take what you find';
+  if (p.cyphers.length > 0 && !tut.cyMenu) return touch ? 'calibration: the marked tab — your devices' : 'calibration: C — the devices you carry';
   const spawnDist = tileDist(p.x, p.y, 2.5, 22.5);
   if (spawnDist < 2.5) return touch ? 'calibration: push the stick — walk' : 'calibration: W A S D — walk';
   if (tut.looked < 1.2) return touch ? 'calibration: drag the view — look' : 'calibration: move the mouse — look';
@@ -278,7 +278,7 @@ function loop(now) {
   if (state.mode === 'EXPLORE') { drawViewmodel(); drawCrosshair(); drawTutorial(); drawMinimap(buf, state, input.touchActive); }
   drawHud(buf, state, assets);
   drawRollFeed();
-  if (state.mode === 'EXPLORE' && input.touchActive) drawTouchControls(buf, input);
+  if (state.mode === 'EXPLORE' && input.touchActive) drawTouchControls(buf, input, state);
 
   if (modeAtStart === 'MODAL' && state.mode === 'MODAL') {
     if (drawModal(buf, state, clicks, keys)) {

@@ -718,3 +718,30 @@ clean in both builds, portrait hint renders, autoPerf ratcheted 2→3 under
 SwiftShader, zero page errors.
 Next: Mark re-tests on phone — want new fps number + whether stick/buttons
 feel right; then creature reskin pass (docs/07).
+
+## 2026-07-04 — Touch controls rebuilt around Mark's mobile-FPS reference shot
+Mark: "optimize the UI so it's cleaner and nicer... especially touch, it
+feels janky" + a reference screenshot (mobile FPS: icon buttons, badges,
+decorated stick, corners-only chrome). Root causes of the jank found & fixed:
+- **Stick visual was fixed in the corner while the input anchored to the
+  thumb** — now the drawn base FLOATS to wherever the thumb lands
+  (input.joyBase), with a ghost ring at the rest spot. What you see is what
+  you steer.
+- **Feel was measured in raw screen px** (deflection JOY_PX=46 client px,
+  look = raw client deltas) so sensitivity varied per phone — both are now
+  normalized to LOGICAL px (JOY_LOGICAL 30, LOOK_GAIN 2.2) + a radial 0.15
+  dead zone. Same feel on every device, no drift.
+- **Five identical text rectangles down the right edge** → two clusters:
+  round ICON buttons at the right thumb (sword = attack w/ gold charge ring
+  that sweeps to the heavy threshold; hand = take/use, burns gold when a
+  pickup/door/pillar is in reach) and three quiet icon tabs top-right
+  (map / person / device, device tab wears a cypher-count badge). Hit rects
+  stay bigger than the drawn shapes. Pressed states brighten. "drag to
+  look" hint removed (calibration prompts already teach it).
+- Calibration prompts + map-overlay HANDS text updated to name the icons.
+Verified headless (verify_touch2.mjs, synthetic TouchEvents): floating
+stick moves player, normalized look drag turns view, ATK hold ≥350ms =
+heavy swing, Map tab opens/Close closes, E button interacts, cypher badge —
+plus the desktop suite (?test=1 green, rest/train flow) — zero errors.
+Next: Mark's phone feel check (stick gain LOOK_GAIN 2.2 tunable, one
+constant in input.js); then creature reskin pass (docs/07).
