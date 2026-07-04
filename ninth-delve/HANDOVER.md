@@ -698,3 +698,23 @@ Pool→Might deducts 4 XP, Might max 14→18, benefits 0→1, feed shows "your
 might deepens (+4)" · zero page errors. Screenshots reviewed.
 Next: Mark to playtest on phone (fps number top-right still wanted); then
 creature reskin pass (Numenera IP names) per docs/07 open items.
+
+## 2026-07-04 — Phone UI fixes from Mark's screenshots (30fps, overlaps, portrait)
+Mark sent phone screenshots: touch buttons drawn ON TOP of the minimap,
+message feed running through the virtual stick, portrait mode a mess, 30fps.
+- Minimap moves to top-LEFT when touch is active (right edge belongs to the
+  thumb buttons); its little "M" hint only shows on desktop.
+- Message feed on touch rides higher (bottom at BUF_H−112) and caps at 4
+  lines so it clears both the stick and the minimap.
+- "drag to look" hint moved up out of the calibration-prompt line.
+- Portrait: dim overlay + "turn your phone sideways — the whisperlock is
+  wide" (both builds, touch only; game keeps running underneath).
+- Adaptive retro (3D, touch only): every 2s, fps<45 → hardware scaling +0.5
+  (coarser pixels, up to 4), fps>57 → back down (never finer than the
+  default 2). Should lift his 30fps toward 60 by growing the pixels —
+  which fits the retro look anyway. Desktop P-cycle untouched.
+Verified headless w/ touch contexts (verify_touchui.mjs): landscape layout
+clean in both builds, portrait hint renders, autoPerf ratcheted 2→3 under
+SwiftShader, zero page errors.
+Next: Mark re-tests on phone — want new fps number + whether stick/buttons
+feel right; then creature reskin pass (docs/07).

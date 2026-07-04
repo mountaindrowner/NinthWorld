@@ -179,11 +179,14 @@ function drawViewmodel() {
   buf.restore();
 }
 
-/** Morrowind-style message log: bottom-left, newest nearest the HUD. */
+/** Morrowind-style message log: bottom-left, newest nearest the HUD.
+ * On touch it rides higher (and shorter) so it never crosses the stick. */
 function drawRollFeed() {
   if (!state.rollFeed?.length) return;
-  const vis = state.rollFeed.filter((l) => (state.t - l.t0) / 4500 <= 1);
-  let fy = BUF_H - 52 - (vis.length - 1) * 10;
+  let vis = state.rollFeed.filter((l) => (state.t - l.t0) / 4500 <= 1);
+  if (input.touchActive) vis = vis.slice(-4);
+  const bottom = input.touchActive ? BUF_H - 112 : BUF_H - 52;
+  let fy = bottom - (vis.length - 1) * 10;
   for (const l of vis) {
     const age = (state.t - l.t0) / 4500;
     buf.globalAlpha = Math.min(1, (1 - age) * 3);
@@ -272,7 +275,7 @@ function loop(now) {
 
   renderView(buf, state, assets);
   uiPush(); // everything below draws in 384×216 logical space
-  if (state.mode === 'EXPLORE') { drawViewmodel(); drawCrosshair(); drawTutorial(); drawMinimap(buf, state); }
+  if (state.mode === 'EXPLORE') { drawViewmodel(); drawCrosshair(); drawTutorial(); drawMinimap(buf, state, input.touchActive); }
   drawHud(buf, state, assets);
   drawRollFeed();
   if (state.mode === 'EXPLORE' && input.touchActive) drawTouchControls(buf, input);
@@ -328,6 +331,14 @@ function finishFrame(now) {
   if (state.t < state.fx.shakeUntil) { const m = state.fx.mag * scale * RENDER_SCALE; sx += ((rng() * 2 - 1) * m) | 0; sy += ((rng() * 2 - 1) * m) | 0; }
   view.fillStyle = PALETTE.void; view.fillRect(0, 0, screen.width, screen.height);
   view.drawImage(buffer, 0, 0, VIEW_W, VIEW_H, sx, sy, VIEW_W * scale, VIEW_H * scale);
+
+  // portrait phones get a tiny letterboxed band — ask for landscape
+  if (input.touchActive && screen.height > screen.width) {
+    view.fillStyle = 'rgba(4, 6, 10, 0.72)'; view.fillRect(0, 0, screen.width, screen.height);
+    view.textAlign = 'center'; view.font = `${Math.round(screen.width / 22)}px monospace`;
+    view.fillStyle = PALETTE.gold; view.fillText('turn your phone sideways', screen.width / 2, screen.height / 2 - 12);
+    view.fillStyle = PALETTE.boneShadow; view.fillText('the whisperlock is wide', screen.width / 2, screen.height / 2 + 18);
+  }
 
   frames++;
   if (now - fpsClock >= 500) { fps = Math.round((frames * 1000) / (now - fpsClock)); frames = 0; fpsClock = now; }

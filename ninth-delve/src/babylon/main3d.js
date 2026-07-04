@@ -197,10 +197,13 @@ function drawWorldOverlays() {
 
 function drawFeedAndFx() {
   // message log: bottom-left, newest nearest the HUD (Morrowind's spot).
-  // Explore only — menus and the map get the screen to themselves.
+  // Explore only — menus and the map get the screen to themselves. On touch
+  // it rides higher (and shorter) so it never crosses the stick.
   if (state.mode === 'EXPLORE' && state.rollFeed?.length) {
-    const vis = state.rollFeed.filter((l) => (state.t - l.t0) / 4500 <= 1);
-    let fy = BUF_H - 52 - (vis.length - 1) * 10;
+    let vis = state.rollFeed.filter((l) => (state.t - l.t0) / 4500 <= 1);
+    if (input.touchActive) vis = vis.slice(-4);
+    const bottom = input.touchActive ? BUF_H - 112 : BUF_H - 52;
+    let fy = bottom - (vis.length - 1) * 10;
     for (const l of vis) {
       const age = (state.t - l.t0) / 4500;
       buf.globalAlpha = Math.min(1, (1 - age) * 3);
@@ -230,6 +233,27 @@ function drawFeedAndFx() {
     buf.globalAlpha = 1;
   }
   uiText(buf, `${scene3.engine.getFps().toFixed(0)} fps · 3D`, BUF_W - 4, 9, { color: PALETTE.cyan, align: 'right' });
+
+  // portrait phones get a tiny letterboxed band — ask for landscape
+  if (input.touchActive && uiCanvas.height > uiCanvas.width) {
+    buf.setTransform(1, 0, 0, 1, 0, 0);
+    buf.fillStyle = 'rgba(4, 6, 10, 0.72)'; buf.fillRect(0, 0, uiCanvas.width, uiCanvas.height);
+    buf.textAlign = 'center'; buf.font = `${Math.round(uiCanvas.width / 22)}px monospace`;
+    buf.fillStyle = PALETTE.gold; buf.fillText('turn your phone sideways', uiCanvas.width / 2, uiCanvas.height / 2 - 12);
+    buf.fillStyle = PALETTE.boneShadow; buf.fillText('the whisperlock is wide', uiCanvas.width / 2, uiCanvas.height / 2 + 18);
+    buf.setTransform(K, 0, 0, K, offX, offY);
+  }
+}
+
+// Adaptive retro (phones): the pixels grow until 60fps holds, shrink back when
+// there's headroom. Never finer than the default chunk; desktop keeps P to cycle.
+let perfLevel = 2, perfNextAt = 0;
+function autoPerf() {
+  if (state.t < perfNextAt) return;
+  perfNextAt = state.t + 2000;
+  const f = scene3.engine.getFps();
+  if (f < 45 && perfLevel < 4) { perfLevel += 0.5; scene3.engine.setHardwareScalingLevel(perfLevel); }
+  else if (f > 57 && perfLevel > 2) { perfLevel -= 0.5; scene3.engine.setHardwareScalingLevel(perfLevel); }
 }
 
 function frame() {
@@ -264,6 +288,7 @@ function frame() {
   // the 3D body mirrors the game, then renders
   scene3.sync(input, dt);
   scene3.scene.render();
+  if (input.touchActive) autoPerf();
 
   // UI pass on the transparent overlay (identical modules to classic)
   buf.setTransform(1, 0, 0, 0 + 1, 0, 0);
@@ -272,7 +297,7 @@ function frame() {
   buf.imageSmoothingEnabled = false;
 
   if (state.mode === 'TITLE') { drawTitle(); drawFeedAndFx(); return; }
-  if (state.mode === 'EXPLORE') { drawCrosshair(); drawTutorial(); drawMinimap(buf, state); }
+  if (state.mode === 'EXPLORE') { drawCrosshair(); drawTutorial(); drawMinimap(buf, state, input.touchActive); }
   drawWorldOverlays();
   drawHud(buf, state, assets);
   if (state.mode === 'EXPLORE' && input.touchActive) drawTouchControls(buf, input);

@@ -27,6 +27,7 @@ export function drawTouchControls(ctx, input) {
 
   ctx.globalAlpha = 0.3;
   ctx.fillStyle = PALETTE.boneShadow; ctx.textAlign = 'right';
-  ctx.fillText('drag to look', BUF_W - 66, BUF_H - 46);
+  ctx.fillText('drag to look', BUF_W - 66, BUF_H - 90); // clear of the calibration line
+
   ctx.restore();
 }

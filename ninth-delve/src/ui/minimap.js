@@ -58,16 +58,17 @@ function drawCells(ctx, state, x0, y0, cs, revealAll = false) {
   ctx.restore();
 }
 
-/** Corner minimap (always on in explore). */
-export function drawMinimap(ctx, state) {
-  const size = 62, x0 = BUF_W - size - 6, y0 = 14;
+/** Corner minimap (always on in explore). Sits top-left on touch — the
+ * right edge belongs to the thumb buttons there. */
+export function drawMinimap(ctx, state, touch) {
+  const size = 62, x0 = touch ? 6 : BUF_W - size - 6, y0 = 14;
   ctx.globalAlpha = 0.75; ctx.fillStyle = PALETTE.void;
   ctx.fillRect(x0 - 2, y0 - 2, size + 4, size + 4);
   ctx.globalAlpha = 1;
   ctx.strokeStyle = PALETTE.gold; ctx.lineWidth = 1;
   ctx.strokeRect(x0 - 1.5, y0 - 1.5, size + 3, size + 3);
   drawCells(ctx, state, x0, y0, size / MAP_W);
-  text(ctx, 'M', x0 + size - 5, y0 + size - 2, { color: PALETTE.boneShadow });
+  if (!touch) text(ctx, 'M', x0 + size - 5, y0 + size - 2, { color: PALETTE.boneShadow });
 }
 
 /** Full map overlay (mode==='MAP'): map + objective + controls. Returns true to close. */
