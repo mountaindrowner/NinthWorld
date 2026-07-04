@@ -12,13 +12,14 @@ export const MAP_W = 24;
 export const MAP_H = 24;
 
 // Z5 is chambered (west→east): cache alcove · warden's arena (B guards A) ·
-// exit antechamber, where X is the Whisperlock gate itself. Geometry flex only —
-// every §3.1 placement keeps its cell.
+// exit antechamber, where X is the Whisperlock gate itself. The arena's two
+// freestanding columns (7,2)/(13,2) give the warden's blink-phases something
+// to circle. Geometry flex only — every §3.1 placement keeps its cell.
 /** @type {string[]} row-major, MAP[y][x]. Validated 24×24 by world.connectivityTest. */
 export const MAP = [
   '########################',
   '#..1#.........A#..X....#',
-  '#...D.....B....D.......#',
+  '#...D..#..B..#.D.......#',
   '#...#..........#.......#',
   '######L#############.###',
   '####.........#######D###',

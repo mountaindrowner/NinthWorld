@@ -294,6 +294,8 @@ export function createScene3D(canvas, state, assets) {
   torch(19.5, 8.5, PALETTE.cyanDeep, 12, 0.9, false);       // chasm updraft glow
   torch(21.0, 10.0, PALETTE.mauve, 5, 0.35, false);         // hound den
   torch(11.0, 2.0, PALETTE.cyan, 13, 0.8, false);           // Z5 core heart
+  torch(7.5, 2.5, PALETTE.mauve, 5, 0.4);                   // arena column west
+  torch(13.5, 2.5, PALETTE.mauve, 5, 0.4);                  // arena column east
   torch(3.5, 1.5, PALETTE.goldGlow, 6, 0.5);                // Z5 cache
   torch(18.5, 1.5, PALETTE.gold, 6, 0.5);                   // the exit
   // Z1 collapse shaft + dust

@@ -195,6 +195,21 @@ export function updateSeen(state) {
 }
 
 /**
+ * Can the player see the face of a wall cell (mural etc.)? Aims at a point
+ * pulled toward the viewer so the ray never samples inside the target cell —
+ * hasLOS straight to a wall cell's center always self-blocks.
+ */
+export function canSeeWallFace(state, cx, cy, maxDist = 2.4) {
+  const p = state.player;
+  const tx = cx + 0.5, ty = cy + 0.5;
+  const vx = tx - p.x, vy = ty - p.y;
+  const len = Math.hypot(vx, vy);
+  if (len > maxDist) return false;
+  const t = Math.max(0, (len - 0.75) / len);
+  return hasLOS(state, p.x, p.y, p.x + vx * t, p.y + vy * t);
+}
+
+/**
  * Line-of-sight between two points: march the segment; blocked by any wall or
  * closed door/lock (Tech §4). Chasm and open doors don't block sight.
  */

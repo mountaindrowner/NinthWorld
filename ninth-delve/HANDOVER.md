@@ -865,3 +865,39 @@ Playtest notes:
 Next: Mark plays the finale on device — judge the arena fight (abykos HP 15 /
 dmg 5 vs current build), the seal-lift timing, and whether the white wash
 needs sound ducking.
+
+## 2026-07-04 (2) — Autoplayer + balance pass 1
+Done:
+- **`src/game/bot.js` — the autoplayer** (`index.html?bot=1&profile=brave|careful
+  &speed=K&norender=1`). Plays through the real game verbs (moveWithCollision,
+  playerSwing, interact, tryRest, useCypher, glyphAttempt) on the intended
+  critical path with BFS pathing; `careful` adds the secret cache, chasm climb,
+  hound den, cypher examine/use, kiting, and training (mirrors menus Train).
+  Fixed 1/60s ticks with state.t advanced manually, so all cooldowns/timers
+  accelerate consistently. Metrics in `window.__NINTH_BOT`; sweep harness lives
+  in the session scratchpad (bot_sweep.mjs, 12 seeds × profiles).
+- **Bugs the bot caught on its first walks:**
+  - `muralSeen` could NEVER trigger — hasLOS aimed at the mural wall cell's own
+    center, which always self-blocks. Since O2 (the other clue) is locked
+    BEHIND the glyph door, the only working clue path was the Intuit roll.
+    Fixed via `world.canSeeWallFace()` (aims at the near face), both builds.
+  - Hounds engage across the chasm but can never cross it — confirmed hover-at-
+    the-lip behavior (acceptable for humans; bot now ignores unreachable foes).
+- **Baseline sweep (pre-tuning): brave 12/12 wins, ~5 total damage taken, boss
+  dead in 4.3s avg, zero cyphers needed.** The delve was a cakewalk: armor 3
+  zeroes laaks, murden nets 1, the warden lands 2/hit every 2.2s and dies in
+  ~5 sword hits.
+- **Balance pass 1 (realtime-tuning knobs only — no book stat lines touched):**
+  abykos RT cd 2200→1500ms, speed 1.5→1.9; first Drain 4000→2500ms, repeat
+  9000→6500ms; hug-blink 2200→1600ms; NEW: the warden blinks across the arena
+  when wounded past each third of its health (its §7 'reposition' special,
+  expressed as fight phases). Arena gains two freestanding columns (7,2)/(13,2)
+  + mauve column torches (3D) so the blink phases have geometry to circle.
+
+Deviations/Doc issues:
+- RT table, drain cadence, and blink thresholds are engine realtime tuning
+  (flagged here per prime directive #4); level/target/hp/damage/armor untouched.
+
+Playtest notes: see pass-1 sweep results appended in the next entry.
+Next: read pass-1 sweep; iterate once more if the boss still folds < 8s or
+brave still exits > 60% pools; then commit + push.

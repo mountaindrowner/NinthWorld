@@ -85,7 +85,8 @@ export function drawGlyphPuzzle(ctx, state, clicks, keys) {
   return keys.includes('Escape');
 }
 
-function glyphAttempt(state) {
+/** Exported so the autoplayer (game/bot.js) attempts through the real path. */
+export function glyphAttempt(state) {
   const g = state.glyph;
   if (g.rotation.every((v, i) => v === g.correct[i])) {
     g.solved = true; awardXP(state, 2, 'glyph');

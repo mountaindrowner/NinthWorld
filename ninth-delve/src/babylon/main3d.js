@@ -11,7 +11,7 @@ import { createGameState, logEvent, awardXP, requestWhisper, feedLine as feedLin
 import { initAudio, setZoneDrone, sfx } from '../engine/audio.js';
 import { WHISPERS } from '../data/whispers.js';
 import { spawnExploreEntities } from '../game/entities.js';
-import { moveWithCollision, updateDoors, interact, startClimb, zoneAt, tileDist, hasLOS, cellAt, updateSeen } from '../game/world.js';
+import { moveWithCollision, updateDoors, interact, startClimb, zoneAt, tileDist, hasLOS, cellAt, updateSeen, canSeeWallFace } from '../game/world.js';
 import { updateCombat, playerSwing, toggleAggression } from '../game/combat.js';
 import { pumpScripted, queueScripted, scriptedIntrusion } from '../game/intrusions.js';
 import { pumpTutorial } from '../game/tutorial.js';
@@ -79,7 +79,7 @@ function exploreWorldEvents() {
     awardXP(state, 1, `zone:${z}`);
     if (z === 'Z2') { queueScripted(state, 'Z1'); queueScripted(state, 'Z2'); }
   }
-  if (!state.glyph.muralSeen && tileDist(p.x, p.y, MURAL[0] + 0.5, MURAL[1] + 0.5) < 2.4 && hasLOS(state, p.x, p.y, MURAL[0] + 0.5, MURAL[1] + 0.5)) {
+  if (!state.glyph.muralSeen && canSeeWallFace(state, MURAL[0], MURAL[1])) {
     state.glyph.muralSeen = true; logEvent(state, 'The nest mural shows a sequence of three glyphs.');
   }
   if (state.keyTaken && tileDist(p.x, p.y, 18.5, 1.5) < 3.5 && hasLOS(state, p.x, p.y, 18.5, 1.5)) requestWhisper(state, 'exit');

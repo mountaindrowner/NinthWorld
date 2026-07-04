@@ -7,7 +7,7 @@ import { createGameState, logEvent, awardXP, requestWhisper, feedLine as feedLin
 import { initAudio, setZoneDrone, sfx } from './engine/audio.js';
 import { WHISPERS } from './data/whispers.js';
 import { spawnExploreEntities } from './game/entities.js';
-import { connectivityTest, moveWithCollision, updateDoors, interact, startClimb, zoneAt, tileDist, hasLOS, cellAt, updateSeen } from './game/world.js';
+import { connectivityTest, moveWithCollision, updateDoors, interact, startClimb, zoneAt, tileDist, hasLOS, cellAt, updateSeen, canSeeWallFace } from './game/world.js';
 import { effortCost, applyDamage } from './game/player.js';
 import { updateCombat, playerSwing, toggleAggression } from './game/combat.js';
 import { useCypher, drainRandomCypher } from './game/cyphers.js';
@@ -23,6 +23,7 @@ import { drawReport } from './ui/report.js';
 import { drawMinimap, drawMapOverlay, objectiveText } from './ui/minimap.js';
 import { drawTouchControls } from './ui/touch.js';
 import { text as uiText } from './ui/widgets.js';
+import { createBot } from './game/bot.js';
 
 import { BUF_W, BUF_H, VIEW_W, VIEW_H, RENDER_SCALE } from './engine/screen.js';
 const MOVE_FWD = 4, MOVE_STRAFE = 3, TURN_RATE = 2.5, MOUSE_SENS = 0.0022;
@@ -31,6 +32,14 @@ const params = new URLSearchParams(location.search);
 const TEST = params.has('test');
 const GALLERY = params.has('sprites'); // dev: render every creature frame
 const SEED = params.has('seed') ? (parseInt(params.get('seed'), 10) | 0) : 1;
+// Autoplayer (balance harness): ?bot=1&profile=brave|careful&speed=K runs K
+// fixed 1/60s game ticks per animation frame, advancing state.t manually so
+// every cooldown/timer accelerates consistently. ?norender=1 skips the
+// raycaster so headless sweeps aren't render-bound. Results: window.__NINTH_BOT.
+const BOT = params.has('bot');
+const BOT_SPEED = Math.max(1, parseInt(params.get('speed') || '10', 10) | 0);
+const BOT_PROFILE = params.get('profile') || 'brave';
+const NORENDER = params.has('norender');
 
 const screen = document.getElementById('screen');
 const view = screen.getContext('2d');
@@ -67,6 +76,7 @@ state.mode = 'TITLE';
 state.entities = spawnExploreEntities(rng);
 const input = createInput(screen);
 let assets = null;
+let bot = null; // autoplayer, created when a ?bot=1 delve starts
 
 function startDelve() {
   initAudio();
@@ -98,7 +108,7 @@ function exploreWorldEvents() {
     if (z === 'Z2') { queueScripted(state, 'Z1'); queueScripted(state, 'Z2'); } // floor + strap
   }
   // mural sighting reveals a glyph clue path
-  if (!state.glyph.muralSeen && tileDist(p.x, p.y, MURAL[0] + 0.5, MURAL[1] + 0.5) < 2.4 && hasLOS(state, p.x, p.y, MURAL[0] + 0.5, MURAL[1] + 0.5)) {
+  if (!state.glyph.muralSeen && canSeeWallFace(state, MURAL[0], MURAL[1])) {
     state.glyph.muralSeen = true; logEvent(state, 'The nest mural shows a sequence of three glyphs.');
   }
   // approaching the exit with the Key earns a last whisper
@@ -272,7 +282,7 @@ let fpsClock = 0, frames = 0, prev = 0, fps = 0;
 function loop(now) {
   const dt = prev ? Math.min(0.05, (now - prev) / 1000) : 0;
   prev = now;
-  state.t = now;
+  if (!BOT) state.t = now; // bot mode advances state.t per fixed tick below
 
   const modeAtStart = state.mode; // so the key that opens an overlay can't also dismiss it
   input.wantPointerLock = modeAtStart === 'EXPLORE';
@@ -291,13 +301,23 @@ function loop(now) {
   if (modeAtStart === 'GALLERY') { uiPush(); drawGallery(); finishFrame(now); return; }
 
   if (modeAtStart === 'TITLE') {
+    if (BOT) { startDelve(); bot = createBot(state, BOT_PROFILE); window.__NINTH_BOT = bot.report(); }
     uiPush();
     drawTitle();
-    if (clicks.length || keys.includes('Enter') || keys.includes('KeyE') || keys.includes('Space')) startDelve();
+    if (!BOT && (clicks.length || keys.includes('Enter') || keys.includes('KeyE') || keys.includes('Space'))) startDelve();
     finishFrame(now); return;
   }
 
-  if (modeAtStart === 'EXPLORE') {
+  if (BOT && bot) {
+    for (let i = 0; i < BOT_SPEED && state.mode !== 'REPORT'; i++) {
+      state.t += 1000 / 60;
+      bot.tick(1 / 60);
+      if (state.mode === 'EXPLORE') updateExplore(1 / 60);
+      else if (state.mode === 'ASCEND' && state.t - state.ascend.t0 > ASCEND_MS) state.mode = 'REPORT';
+    }
+    if (state.mode === 'REPORT') bot.tick(0); // finalize metrics
+    window.__NINTH_BOT = bot.report();
+  } else if (modeAtStart === 'EXPLORE') {
     updateExplore(dt);
     if (keys.includes('KeyR')) { openRestMenu(state); input.clearBuffered(); }
     if (keys.includes('KeyF')) toggleAggression(state);
@@ -308,7 +328,7 @@ function loop(now) {
     if (state.t - state.ascend.t0 > ASCEND_MS) state.mode = 'REPORT';
   }
 
-  renderView(buf, state, assets);
+  if (!NORENDER) renderView(buf, state, assets);
   uiPush(); // everything below draws in 384×216 logical space
   if (state.mode === 'EXPLORE') { drawViewmodel(); drawCrosshair(); drawTutorial(); drawMinimap(buf, state, input.touchActive); }
   drawHud(buf, state, assets, input.touchActive);

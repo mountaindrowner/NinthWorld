@@ -26,7 +26,9 @@ const RT = {
   laak: { speed: 2.4, cd: 1200, reach: 1.0 },
   hound: { speed: 3.0, cd: 1500, reach: 1.1 },
   murden: { speed: 2.2, cd: 1800, reach: 1.1 },
-  abykos: { speed: 1.5, cd: 2200, reach: 1.3 },
+  // the warden presses: bot-sweep balance pass — at 2200ms cd a Tier-1 Glaive
+  // traded 3:1 and dropped it in ~4s without ever being threatened
+  abykos: { speed: 1.9, cd: 1500, reach: 1.3 },
 };
 
 const engagedCreatures = (state) => state.entities.filter((e) => e.kind === 'creature' && e.alive && !e.hidden && e.engaged);
@@ -171,7 +173,7 @@ export function updateCombat(state, dt) {
     if (!e.engaged) {
       if (d <= e.aggro && hasLOS(state, e.x, e.y, p.x, p.y)) {
         e.engaged = true;
-        if (e.creatureId === 'abykos') { requestWhisper(state, 'boss'); e.nextDrain = state.t + 4000; }
+        if (e.creatureId === 'abykos') { requestWhisper(state, 'boss'); e.nextDrain = state.t + 2500; }
         feedLine(state, `the ${def.name} has noticed you`, PALETTE.rust);
       } else {
         // drift home
@@ -183,18 +185,22 @@ export function updateCombat(state, dt) {
     if (e.engaged && d > e.aggro + LEASH) { e.engaged = false; continue; }
     if (state.t < (e.stunUntil || 0)) continue;
 
-    // Abykos: the Drain on a timer while engaged; repositions if you hug it
+    // Abykos: the Drain on a timer while engaged; repositions when hugged AND
+    // when wounded past each third of its health — the fight comes in phases
+    // (bot-sweep balance pass: a stationary warden died in ~5 sword hits flat)
     if (e.creatureId === 'abykos') {
       if (state.t >= (e.nextDrain || 0) && p.cyphers.length) {
         sfx.drain();
         poseFrame(state, e, e.F.drain, 900); // arms spread, gold pulled inward
         addPopup(state, e.x, e.y, 'drain', PALETTE.goldGlow);
         drainTick(state);
-        e.nextDrain = state.t + 9000;
+        e.nextDrain = state.t + 6500;
       }
+      const stage = e.hp <= e.maxHp / 3 ? 2 : e.hp <= (2 * e.maxHp) / 3 ? 1 : 0;
+      if (stage > (e.blinkStage || 0)) { e.blinkStage = stage; blinkAway(state, e); }
       if (d < 1.0) {
         e.hugTime = (e.hugTime || 0) + dt * 1000;
-        if (e.hugTime > 2200) { e.hugTime = 0; blinkAway(state, e); }
+        if (e.hugTime > 1600) { e.hugTime = 0; blinkAway(state, e); }
       } else e.hugTime = 0;
     }
 
