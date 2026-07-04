@@ -80,7 +80,7 @@ export function button(ctx, b, clicks, keys) {
     ctx.fillStyle = accent; ctx.fillRect(b.x + 1, b.y + b.h - 3, 2, 2);
   }
   ctx.font = '8px monospace'; ctx.textAlign = 'left';
-  const hk = b.hotkey ? `${b.hotkey === 'Enter' ? '\u21B5' : b.hotkey.replace('Digit', '')} ` : '';
+  const hk = b.hotkey ? `${b.hotkey === 'Enter' ? '\u21B5' : b.hotkey.replace('Digit', '').replace('Key', '')} ` : '';
   outlined(ctx, hk + b.label, b.x + 4, b.y + Math.round(b.h / 2) + 3, dim ? PALETTE.boneShadow : PALETTE.boneLight);
   if (dim) return false;
 

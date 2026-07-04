@@ -19,19 +19,19 @@ export const MAP = [
   '#......................#',
   '######L#############.###',
   '####.........#######D###',
-  '####..D......######~...#',
+  '####.........######~...#',
   '####..G.G.G..######~...#',
-  '#............#####S~...#',
+  '#...........######S~...#',
   '#.2.........D......~...#',
-  '#............######~.4.#',
+  '#...........#######~.4.#',
   '#............S.####~...#',
-  '#............#######...#',
-  '#.3.D###################',
+  '####.........#######...#',
+  '#.3#D###################',
   '#....###################',
   '#...####################',
   '#...####################',
   '#...S5##################',
-  '#.D.####################',
+  '##D#####################',
   '#..........#############',
   '#..........#############',
   '#....6.....#############',
@@ -94,6 +94,10 @@ export const MURALS = [[4, 15]];
  * - L opens once all glyph pillars are reachable (puzzle solvable).
  * - X opens once the Key (A) has been reached.
  */
-export const DOORS = [[2, 18], [6, 6], [4, 13], [12, 9], [20, 5]];
+// Every door seals a real doorway now (flanked by wall on the cross axis):
+// (2,18) Z1→warrens corridor · (4,13) warrens nest→gallery · (12,9)
+// gallery→chasm approach · (20,5) north corridor→chasm shore. The floating
+// mid-gallery door at (6,6) was deleted — the glyph lock L is that room's gate.
+export const DOORS = [[2, 18], [4, 13], [12, 9], [20, 5]];
 export const LOCK_DOOR = { x: 6, y: 4, opensWhen: 'glyphs-solved' };
 export const EXIT_GATE = { x: 18, y: 1, opensWhen: 'key-taken' };

@@ -766,3 +766,33 @@ New HUD (ui/hud.js rewrite, corners only):
 Verified headless: full touch suite + desktop suite + ?test=1 all green,
 zero errors, screenshots reviewed in both builds.
 Next: Mark's phone pass (feel + fps); creature reskin (docs/07).
+
+## 2026-07-04 — Two-finger camera fix · doors make sense · popup tutorial
+Mark reported camera "twist and turn" with two fingers, doors in illogical
+places, and asked for explicit first-time tutorials ("room to room, popups
+that teach").
+- **Camera twist FIXED**: two touches on the look half both fed yaw/pitch and
+  fought each other. Input now allows exactly ONE stick finger + ONE look
+  finger; extra touches on the same half are inert. iOS pinch gestures
+  preventDefault'ed too.
+- **Door audit (map geometry)**: 4 of 5 doors were floating in open floor —
+  walkaroundable, gating nothing. Now every door seals a real flanked
+  doorway: (2,18) Z1→warrens, (4,13) nest→gallery (west flank walled),
+  (12,9) gallery→chasm approach (N/S flanks walled), (20,5) unchanged; the
+  pointless mid-gallery door (6,6) deleted. Warrens no longer leak into the
+  gallery over rows 12/13 (x1–3 walled). Static door-logic audit + flood
+  connectivity both pass; placements untouched.
+- **Tutorial popups (new src/game/tutorial.js)**: 8 one-shot "calibration
+  record" modals fire the first time the player meets each thing — welcome/
+  goal, first fight, first pickup (discovery-XP philosophy), first door,
+  first cypher, the glyph gallery, the chasm, and 4-XP training. Touch and
+  desktop get different control hints. Fires only when explore is idle;
+  scripted intrusions still take priority. Passive cyan prompts unchanged.
+- **Touch can rest now** (was desktop-only R!): Sheet gains a gold
+  "Rest & Train" button → rest/train menu. Hotkey labels render "R" not
+  "KeyR".
+Verified headless (verify_logic.mjs + both regression suites re-run):
+16/16 logic checks + full touch suite + desktop suite green, zero errors.
+Door-audit rule: every D cell must have solid flanks on exactly one axis.
+Old test scripts pre-seed tutSeen to stay isolated from the new popups.
+Next: Mark's phone pass; creature reskin (docs/07).

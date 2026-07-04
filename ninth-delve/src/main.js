@@ -12,6 +12,7 @@ import { effortCost, applyDamage } from './game/player.js';
 import { updateCombat, playerSwing, toggleAggression } from './game/combat.js';
 import { useCypher, drainRandomCypher } from './game/cyphers.js';
 import { pumpScripted, queueScripted, scriptedIntrusion } from './game/intrusions.js';
+import { pumpTutorial } from './game/tutorial.js';
 import { CREATURES, armorVs } from './data/creatures.js';
 import { CELL, MURALS } from './data/map_whisperlock.js';
 import { render as renderView } from './engine/raycaster.js';
@@ -145,6 +146,8 @@ function updateExplore(dt) {
   const obj = objectiveText(state);
   if (obj !== state.lastObjective) { state.lastObjective = obj; feedLine2(state, `goal — ${obj}`, PALETTE.goldGlow); }
   pumpScripted(state);          // fire any queued scripted intrusion when idle
+  pumpTutorial(state, input.touchActive);
+  if (state.mode !== 'EXPLORE') input.clearBuffered(); // fresh modal: drop stale taps
 }
 
 function openGlyph() {

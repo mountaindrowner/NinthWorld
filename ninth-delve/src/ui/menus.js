@@ -127,6 +127,11 @@ export function drawSheet(ctx, state, clicks, keys, assets) {
   text(ctx, `Aggression (2 Might) · Fleet of Foot (1 Speed)`, x + 8, sy + 34, { size: 8, color: PALETTE.boneLight });
   text(ctx, `XP ${p.xp} (spent ${p.xpSpent}) · cyphers ${p.cyphers.length}/${p.cypherLimit} · ${p.shins} shins`, x + 8, sy + 46, { size: 8, color: PALETTE.goldGlow });
 
+  // touch has no R key — rest & training live here too
+  if (button(ctx, { x: x + 8, y: y + h - 22, w: 92, h: 16, label: 'Rest & Train', hotkey: 'KeyR', accent: PALETTE.goldGlow }, clicks, keys)) {
+    openRestMenu(state); // swaps the sheet for the rest modal
+    return false;
+  }
   if (button(ctx, { x: x + w - 74, y: y + h - 22, w: 64, h: 16, label: 'Close', hotkey: 'Enter' }, clicks, keys)) return true;
   return keys.includes('Tab') || keys.includes('Escape');
 }

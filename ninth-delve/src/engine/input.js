@@ -117,8 +117,16 @@ export function createInput(canvas) {
         else { fireButton(btn.id); active.set(t.identifier, { role: 'button', btnId: btn.id }); }
         continue;
       }
-      if (b.x < BUF_W / 2) { state.joyBase = b; active.set(t.identifier, { role: 'move', ox: t.clientX, oy: t.clientY }); }
-      else { active.set(t.identifier, { role: 'look', prevX: t.clientX, prevY: t.clientY }); }
+      // exactly ONE stick finger and ONE look finger — a second touch on the
+      // same half is inert, otherwise two look-drags fight and the camera twists
+      const roles = new Set([...active.values()].map((a) => a.role));
+      if (b.x < BUF_W / 2) {
+        if (roles.has('move')) { active.set(t.identifier, { role: 'idle' }); continue; }
+        state.joyBase = b; active.set(t.identifier, { role: 'move', ox: t.clientX, oy: t.clientY });
+      } else {
+        if (roles.has('look')) { active.set(t.identifier, { role: 'idle' }); continue; }
+        active.set(t.identifier, { role: 'look', prevX: t.clientX, prevY: t.clientY });
+      }
     }
     e.preventDefault();
   }, { passive: false });
@@ -159,6 +167,10 @@ export function createInput(canvas) {
   };
   canvas.addEventListener('touchend', endTouch, { passive: false });
   canvas.addEventListener('touchcancel', endTouch, { passive: false });
+  // iOS Safari pinch/rotate gestures would zoom the page mid-fight
+  for (const ev of ['gesturestart', 'gesturechange', 'gestureend']) {
+    canvas.addEventListener(ev, (e) => e.preventDefault());
+  }
 
   return state;
 }

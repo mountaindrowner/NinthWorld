@@ -14,6 +14,7 @@ import { spawnExploreEntities } from '../game/entities.js';
 import { moveWithCollision, updateDoors, interact, startClimb, zoneAt, tileDist, hasLOS, cellAt, updateSeen } from '../game/world.js';
 import { updateCombat, playerSwing, toggleAggression } from '../game/combat.js';
 import { pumpScripted, queueScripted, scriptedIntrusion } from '../game/intrusions.js';
+import { pumpTutorial } from '../game/tutorial.js';
 import { CELL, MURALS } from '../data/map_whisperlock.js';
 import { createInput } from '../engine/input.js';
 import { drawHud } from '../ui/hud.js';
@@ -121,6 +122,8 @@ function updateExplore(dt) {
   const obj = objectiveText(state);
   if (obj !== state.lastObjective) { state.lastObjective = obj; feedLine2(state, `goal — ${obj}`, PALETTE.goldGlow); }
   pumpScripted(state);
+  pumpTutorial(state, input.touchActive);
+  if (state.mode !== 'EXPLORE') input.clearBuffered(); // fresh modal: drop stale taps
 }
 
 function openGlyph() {
