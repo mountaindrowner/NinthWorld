@@ -49,7 +49,11 @@ export const CREATURES = {
     id: 'abykos', name: 'Abykos of the Core', level: 4, target: 12, hp: 15, damage: 5,
     armor: { physical: 3, energy: 0 },
     moveBand: 'short', aggro: 8, sprite: 'abykos',
-    special: ['drain', 'might_touch', 'reposition'], // §7
+    // §7 + phase_touch: balance-pass interpretation (flagged in HANDOVER) — a
+    // transdimensional being's touch passes through armor exactly like the
+    // hound's phase-lunge; with armor applied its 5 dmg landed as a 2-pt tap
+    // and the warden could never threaten a Tier-1 Glaive (bot sweep data).
+    special: ['drain', 'might_touch', 'phase_touch', 'reposition'],
     intrusion: 'abykos_surge', // drains +1 extra cypher level this round
     worldH: 1.5, // 64×96 — it looms
     F: { idleA: 0, idleB: 1, drain: 2, touch: 3, hit: 4, deathA: 5, deathB: 6, atk: 3, front: [0, 1], back: [7, 8] },

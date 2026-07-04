@@ -171,7 +171,7 @@ export function updateCombat(state, dt) {
 
     // engage / leash
     if (!e.engaged) {
-      if (d <= e.aggro && hasLOS(state, e.x, e.y, p.x, p.y)) {
+      if (d <= e.aggro && state.t >= (e.noAggroUntil || 0) && hasLOS(state, e.x, e.y, p.x, p.y)) {
         e.engaged = true;
         if (e.creatureId === 'abykos') { requestWhisper(state, 'boss'); e.nextDrain = state.t + 2500; }
         feedLine(state, `the ${def.name} has noticed you`, PALETTE.rust);
@@ -232,6 +232,22 @@ export function updateCombat(state, dt) {
       }
     }
 
+    // a chase it can make no progress on (hound stuck at the chasm lip) is
+    // abandoned after a beat — no more impotent hovering in sword range of a
+    // gap it can't cross. The warden never gives up; a ranged murden holding
+    // its throwing distance isn't stuck, it's working.
+    if (e.engaged && e.creatureId !== 'abykos' && d > rt.reach
+      && !(def.ranged && d <= def.ranged.range && hasLOS(state, e.x, e.y, p.x, p.y))) {
+      const moved = Math.hypot(e.x - (e.lastCX ?? e.x), e.y - (e.lastCY ?? e.y));
+      e.stuckT = moved < 0.01 ? (e.stuckT || 0) + dt : 0;
+      if (e.stuckT > 2.5) {
+        e.stuckT = 0; e.engaged = false;
+        e.noAggroUntil = state.t + 6000; // long enough to actually walk off
+        feedLine(state, `the ${def.name} gives up the chase`, PALETTE.boneShadow);
+      }
+    } else e.stuckT = 0;
+    e.lastCX = e.x; e.lastCY = e.y;
+
     // in reach it squares up to you (directional sprite shows its face)
     if (e.engaged && d <= rt.reach * 1.2) e.heading = Math.atan2(p.y - e.y, p.x - e.x);
 
@@ -273,7 +289,7 @@ function enemyStrike(state, e, def, { ranged = false } = {}) {
 
   // hit taken — phase-lunge ignores Armor (Appendix REQUIRED); a thrown stone
   // always finds a gap for at least 1 (harassment, not artillery)
-  const ignoresArmor = !ranged && def.special.includes('phase_lunge');
+  const ignoresArmor = !ranged && (def.special.includes('phase_lunge') || def.special.includes('phase_touch'));
   const armor = ignoresArmor ? 0 : Math.max(0, p.armor - p.armorPenalty);
   const dmg = ranged ? Math.max(1, def.ranged.damage - armor) : Math.max(0, def.damage - armor);
   applyDamage(p, dmg);
@@ -361,6 +377,10 @@ export function tryRest(state) {
   const p = state.player;
   if (inCombat(state)) { feedLine(state, 'no rest — something hunts you', PALETTE.rust); return; }
   if (p.restsUsed >= 3) { feedLine(state, 'no rest slots left before a long sleep', PALETTE.rust); return; }
+  // the daily slots escalate in fiction ('1 action', '10 minutes', '1 hour') —
+  // they can't be chained back-to-back in one breath (bot sweep found the chain)
+  if (state.t < (p.nextRestAt || 0)) { feedLine(state, 'too soon — your body is still settling', PALETTE.rust); return; }
+  p.nextRestAt = state.t + 8000;
   const r = recover(p, KAVE.recovery, state.rng);
   p.armorPenalty = 0; // a strapped-down rest re-cinches the armor
   feedLine(state, `rest (${KAVE.restSequence[p.restsUsed - 1] || ''}) — recovered ${r.points}`, PALETTE.cyan);

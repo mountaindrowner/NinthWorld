@@ -69,7 +69,7 @@ export function createBot(state, profileName = 'brave') {
   let stepIdx = 0;
   let path = null, pathGoal = null, allowChasm = false;
   let stuckT = 0, lastPos = { x: 0, y: 0 };
-  let modalDelay = 0;
+  let modalDelay = 0, actNextAt = 0;
   const examined = new Set();      // cypher uids we already tried to examine
   const seenFeed = new Set();      // rollFeed line objects already parsed
 
@@ -158,17 +158,26 @@ export function createBot(state, profileName = 'brave') {
     const p = state.player;
     return (p.pools.might + p.pools.speed + p.pools.intellect) / (p.poolMax.might + p.poolMax.speed + p.poolMax.intellect);
   };
-  // foes that engaged but can't reach us (hounds across the chasm) get ignored
-  // for a while so the bot doesn't duel across a pit forever
-  const ignoreUntil = new Map();  // uid -> state.t deadline
+  // a foe only counts if we could actually walk to it — hounds glaring across
+  // the chasm are scenery until the crossing opens (BFS answers, cached briefly)
+  const reachCache = new Map();   // uid -> {t, ok}
+  const ignoreUntil = new Map();  // uid -> state.t deadline (stalemate backstop)
   let fightIdleT = 0, lastExchange = 0;
+  function foeReachable(e) {
+    if (tileDist(state.player.x, state.player.y, e.x, e.y) < 2.0) return true;
+    const c = reachCache.get(e.uid);
+    if (c && state.t - c.t < 1500) return c.ok;
+    const ok = !!findPath(e.x, e.y);
+    reachCache.set(e.uid, { t: state.t, ok });
+    return ok;
+  }
   const engagedFoes = () => state.entities.filter((e) => {
     if (e.kind !== 'creature' || !e.alive || e.hidden || !e.engaged) return false;
     if ((ignoreUntil.get(e.uid) || 0) > state.t) {
       if (tileDist(state.player.x, state.player.y, e.x, e.y) < 2.2) ignoreUntil.delete(e.uid); // it reached us after all
       else return false;
     }
-    return true;
+    return foeReachable(e);
   });
 
   function fight(dt) {
@@ -344,10 +353,17 @@ export function createBot(state, profileName = 'brave') {
       stepIdx += 1; path = null;
       return;
     }
-    if (arrived && step.act) {
+    if (arrived && step.act && state.t >= actNextAt) {
+      actNextAt = state.t + 1500;  // a player re-attempts after a beat, not 60/s
       if (step.face) p.angle = Math.atan2(step.face[1] - p.y, step.face[0] - p.x);
       if (step.act === 'bump') interact(state);
-      else if (step.act === 'climb') { const ev = interact(state); if (ev?.kind === 'climb') startClimb(state); }
+      else if (step.act === 'climb') {
+        const gravIdx = p.cyphers.findIndex((c) => c.identified && c.effect === 'gravity');
+        if (gravIdx >= 0) { mark('use gravity'); state.log.push(useCypher(state, gravIdx)); return; }
+        if (poolPct() < 0.45 && p.restsUsed < 3) return; // patch up before risking slips
+        const ev = interact(state);
+        if (ev?.kind === 'climb') startClimb(state);
+      }
       else if (step.act === 'pillar') {
         const ev = interact(state);
         if (ev?.kind === 'glyph') {

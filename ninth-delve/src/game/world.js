@@ -280,6 +280,7 @@ function climbRolls(state) {
       hinders: state.climbPenalty ? [{ label: 'crumbling hold', steps: 1 }] : [],
       rng: state.rng,
     });
+    state.climbPenalty = 0; // the crumbling hold crumbles ONCE, not every retry
     feedLine(state, audit.success ? `you ${label} — solid holds` : `you slip on the ${label}`,
       audit.success ? PALETTE.cyan : PALETTE.blood);
     return audit.success;
