@@ -12,8 +12,11 @@ export function drawReport(ctx, state, clicks, keys) {
   panel(ctx, x, y, w, h, 'Delve Report');
 
   const win = state.reportReason !== 'defeat';
-  text(ctx, win ? (state.keyTaken ? 'The Whisperlock opens.' : 'You leave the dark.') : 'The dark keeps you.',
-    x + 10, y + 24, { size: 8, color: win ? PALETTE.cyan : PALETTE.blood });
+  text(ctx, win
+    ? (state.exited ? 'The lock turns — you rise into the Ninth World.'
+      : (state.keyTaken ? 'The Whisperlock opens.' : 'You leave the dark.'))
+    : 'The dark keeps you.',
+  x + 10, y + 24, { size: 8, color: win ? PALETTE.cyan : PALETTE.blood });
 
   const secs = Math.max(0, Math.round(((state.endTime || state.t) - (state.startTime || 0)) / 1000));
   const lines = [

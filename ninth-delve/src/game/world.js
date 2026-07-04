@@ -3,7 +3,7 @@
 // helpers and the door/key connectivity proof required by the build plan.
 
 import {
-  MAP, MAP_W, MAP_H, CELL, PLACEMENTS, ZONES, MURALS, DOORS,
+  MAP, MAP_W, MAP_H, CELL, PLACEMENTS, ZONES, MURALS, DOORS, EXIT_GATE,
 } from '../data/map_whisperlock.js';
 import { ODDITIES, ARTIFACT } from '../data/cyphers_oddities.js';
 import { awardXP, logEvent, overLimit, requestWhisper, feedLine } from './state.js';
@@ -51,6 +51,8 @@ export function wallTextureKey(x, y) {
   if (c === CELL.DOOR) return 'door_slide';
   if (c === CELL.LOCK) return 'door_glyph';
   if (c === CELL.SECRET) return 'wall_scuffed';
+  // the wall the exit gate is set into reads as the great glyph seal
+  if (x === EXIT_GATE.x && y === EXIT_GATE.y - 1) return 'door_glyph';
   if (MURAL_SET.has(keyOf(x, y))) return 'wall_mural';
   const z = zoneAt(x, y);
   if (z === 'Z2') return 'wall_warren';

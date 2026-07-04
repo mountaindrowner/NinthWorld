@@ -62,6 +62,7 @@ export function createGameState(rng, seed) {
     modal: null,                  // {kind, ...} while mode==='MODAL'
     keyTaken: false,
     exited: false,
+    ascend: null,                 // {t0} while the gate carries you out (mode==='ASCEND')
     log: [],                      // recent event strings (HUD ticker)
     stats: { discoveries: 0, kills: 0, secrets: 0, cyphersUsed: 0, cyphersHoarded: 0, rerolls: 0 },
     whisper: null,                // {text, until} environmental text box

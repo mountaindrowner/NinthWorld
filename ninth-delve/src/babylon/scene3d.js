@@ -5,7 +5,7 @@
 // lives here. Expects the vendored BABYLON global (vendor/babylon.js).
 
 import { PALETTE } from '../engine/texgen.js';
-import { MAP, MAP_W, MAP_H, CELL, PLACEMENTS, DOORS, ZONES } from '../data/map_whisperlock.js';
+import { MAP, MAP_W, MAP_H, CELL, PLACEMENTS, DOORS, ZONES, EXIT_GATE } from '../data/map_whisperlock.js';
 import { wallTextureKey, doorSlide } from '../game/world.js';
 import { CREATURES } from '../data/creatures.js';
 
@@ -15,9 +15,16 @@ export const wx = (mx) => mx * C;
 export const wz = (my) => -my * C;
 
 // per-zone ceiling heights (real shape — the raycaster's one impossible thing)
+const SHAFT_TOP = 8.6;                                       // the gate's light well
 function ceilH(x, y) {
+  if (x === EXIT_GATE.x && y === EXIT_GATE.y) return SHAFT_TOP; // ascent shaft over X
   if (x >= 4 && x <= 10 && y >= 19 && y <= 21) return 5.2;   // Z1 collapsed room
-  if (y >= 1 && y <= 3) return 6.0;                          // Z5 lock core
+  if (y >= 1 && y <= 3) {                                    // Z5, chambered:
+    if (x <= 4) return 3.0;                                  //   cache alcove
+    if (x <= 15) return 6.0;                                 //   warden's arena
+    return 3.6;                                              //   exit antechamber
+  }
+  if (x === 20 && y === 4) return 3.6;                       // antechamber→chasm notch
   if (x >= 15 && x <= 22 && y >= 4 && y <= 12) return 5.6;   // Z4 chasm cavern
   if (x >= 4 && x <= 12 && y >= 5 && y <= 12) return 3.8;    // Z3 whisper gallery
   return 2.6;                                                // corridors
@@ -101,9 +108,12 @@ export function createScene3D(canvas, state, assets) {
         d.position.set(wx(x) + C / 2, 1.3, wz(y) - C / 2);
         d.material = matFor(ch === CELL.LOCK ? 'door_glyph' : 'door_slide');
         doorMeshes.push({ mesh: d, x, y, axis, baseX: d.position.x, baseZ: d.position.z });
-        // door frame filler above
-        const top = BABYLON.MeshBuilder.CreateBox('dt', { width: C, depth: C, height: ceilH(x, y) - 2.6 + 0.01 }, scene);
-        top.position.set(wx(x) + C / 2, 2.6 + (ceilH(x, y) - 2.6) / 2, wz(y) - C / 2);
+        // door frame filler above — up to the TALLEST adjoining ceiling, so a
+        // doorway between rooms of different heights leaves no open band
+        let topH = ceilH(x, y);
+        for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) topH = Math.max(topH, ceilH(x + dx, y + dy));
+        const top = BABYLON.MeshBuilder.CreateBox('dt', { width: C, depth: C, height: topH - 2.6 + 0.01 }, scene);
+        top.position.set(wx(x) + C / 2, 2.6 + (topH - 2.6) / 2, wz(y) - C / 2);
         top.material = matFor('wall_synth'); bucket('wall_synth', top);
         // floor under the door
         const df = BABYLON.MeshBuilder.CreateGround('df', { width: C, height: C }, scene);
@@ -198,6 +208,73 @@ export function createScene3D(canvas, state, assets) {
     s.material = smm; s.isVisible = false;
     shimmer.push(s);
   }
+
+  // --- the Whisperlock gate: the exit made physical --------------------------
+  // A framed seal on the X cell's north face; behind/above it, a light well
+  // rises to SHAFT_TOP. Sealed: dim rust glyph-slab. Key taken: the slab lifts
+  // and dissolves, the well fills with a beam the whole antechamber can see,
+  // and stepping in starts the ascent.
+  const GX = EXIT_GATE.x, GY = EXIT_GATE.y;
+  const gcx = wx(GX) + C / 2, gcz = wz(GY) - C / 2;  // shaft cell center
+  {
+    // well skirts: close the vertical gap between the antechamber ceiling and
+    // the shaft top on the three open sides (the north side is real wall)
+    const rim = 3.55, skirtH = SHAFT_TOP - rim + 0.02;
+    for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1]]) {
+      const sk = BABYLON.MeshBuilder.CreatePlane('gsk', { width: C, height: skirtH }, scene);
+      sk.position.set(gcx + dx * C / 2, rim + skirtH / 2, gcz - dy * C / 2);
+      sk.rotation.y = dx === 1 ? -Math.PI / 2 : dx === -1 ? Math.PI / 2 : Math.PI;
+      sk.material = matFor('wall_conduit'); sk.freezeWorldMatrix(); // post-merge: stays individual
+    }
+    // frame: two jambs + lintel in dark steel with a gold seam
+    const frameMat = new BABYLON.StandardMaterial('gfm', scene);
+    frameMat.diffuseColor = BABYLON.Color3.FromHexString(PALETTE.deepSteel);
+    frameMat.emissiveColor = BABYLON.Color3.FromHexString(PALETTE.gold).scale(0.22);
+    frameMat.specularColor = BABYLON.Color3.Black();
+    const fz = wz(GY) - 0.16;
+    for (const side of [-1, 1]) {
+      const jamb = BABYLON.MeshBuilder.CreateBox('gj', { width: 0.26, depth: 0.34, height: 3.3 }, scene);
+      jamb.position.set(gcx + side * (C / 2 - 0.16), 1.65, fz);
+      jamb.material = frameMat;
+    }
+    const lintel = BABYLON.MeshBuilder.CreateBox('gl', { width: C, depth: 0.34, height: 0.42 }, scene);
+    lintel.position.set(gcx, 3.3 + 0.21, fz);
+    lintel.material = frameMat;
+  }
+  // the seal: a glyph-slab that lifts + dissolves once the Key is taken
+  const sealMat = matFor('door_glyph').clone('gateSeal');
+  sealMat.emissiveColor = BABYLON.Color3.FromHexString(PALETTE.rust).scale(0.4);
+  const seal = BABYLON.MeshBuilder.CreateBox('gseal', { width: C - 0.5, depth: 0.16, height: 3.1 }, scene);
+  seal.position.set(gcx, 1.55, wz(GY) - 0.22);
+  seal.material = sealMat;
+  // the beam: nested emissive cylinders filling the well once open
+  const beamMat = new BABYLON.StandardMaterial('gbm', scene);
+  beamMat.emissiveColor = BABYLON.Color3.FromHexString(PALETTE.staticWhite);
+  beamMat.alpha = 0.16; beamMat.disableLighting = true;
+  beamMat.backFaceCulling = false;
+  const beamCoreMat = beamMat.clone('gbmc');
+  beamCoreMat.alpha = 0.34;
+  beamCoreMat.emissiveColor = BABYLON.Color3.FromHexString(PALETTE.cyan);
+  const beam = BABYLON.MeshBuilder.CreateCylinder('gbeam', { diameter: 1.05, height: SHAFT_TOP - 0.1 }, scene);
+  beam.position.set(gcx, SHAFT_TOP / 2, gcz); beam.material = beamMat; beam.isVisible = false;
+  const beamCore = BABYLON.MeshBuilder.CreateCylinder('gbeamc', { diameter: 0.5, height: SHAFT_TOP - 0.1 }, scene);
+  beamCore.position.set(gcx, SHAFT_TOP / 2, gcz); beamCore.material = beamCoreMat; beamCore.isVisible = false;
+  // gate light + rising motes, armed when the gate opens
+  const gateLight = new BABYLON.PointLight('gateL', new BABYLON.Vector3(gcx, 2.4, gcz), scene);
+  gateLight.diffuse = BABYLON.Color3.FromHexString(PALETTE.cyan); gateLight.range = 11; gateLight.intensity = 0;
+  const moteCnv = document.createElement('canvas'); moteCnv.width = moteCnv.height = 8;
+  const mctx = moteCnv.getContext('2d');
+  mctx.fillStyle = PALETTE.staticWhite; mctx.beginPath(); mctx.arc(4, 4, 2, 0, Math.PI * 2); mctx.fill();
+  const motes = new BABYLON.ParticleSystem('gmotes', 110, scene);
+  motes.particleTexture = new BABYLON.Texture(moteCnv.toDataURL(), scene);
+  motes.emitter = new BABYLON.Vector3(gcx, 0.1, gcz);
+  motes.minEmitBox = new BABYLON.Vector3(-0.45, 0, -0.45); motes.maxEmitBox = new BABYLON.Vector3(0.45, 0.2, 0.45);
+  motes.color1 = new BABYLON.Color4(0.95, 0.93, 0.85, 0.5); motes.color2 = new BABYLON.Color4(0.31, 0.89, 0.76, 0.12);
+  motes.minSize = 0.02; motes.maxSize = 0.08; motes.minLifeTime = 2.5; motes.maxLifeTime = 6;
+  motes.direction1 = new BABYLON.Vector3(-0.05, 0.9, -0.05); motes.direction2 = new BABYLON.Vector3(0.05, 1.6, 0.05);
+  motes.emitRate = 0;
+  motes.start();
+  let gateT = 0; // 0 sealed → 1 open
 
   // --- lights: curated mood set (the migration's whole point) ----------------
   const lights = [];
@@ -336,6 +413,40 @@ export function createScene3D(canvas, state, assets) {
     cam.rotation.y = Math.atan2(Math.cos(p.angle), -Math.sin(p.angle));
     cam.rotation.x = pitch;
     cam.rotation.z = t < state.fx.shakeUntil ? (Math.random() - 0.5) * 0.03 : cam.rotation.z * 0.8;
+    if (state.ascend) {
+      // the shaft carries you: drift to its center, rise, slow turn, eyes up
+      const k = Math.min(1, (t - state.ascend.t0) / 4600);
+      const pull = Math.min(1, k * 3);
+      cam.position.x += (gcx - cam.position.x) * pull;
+      cam.position.z += (gcz - cam.position.z) * pull;
+      cam.position.y = EYE + k * k * (SHAFT_TOP - EYE - 1.2);
+      cam.rotation.y += k * 2.1;             // one slow turn over the whole ride
+      cam.rotation.x += (-0.5 - cam.rotation.x) * pull;
+      gateLight.intensity = 1.3 + k * 2.2;
+    }
+
+    // the gate answers the Key: seal lifts + dissolves, the well lights
+    const gateTarget = state.keyTaken ? 1 : 0;
+    if (gateT !== gateTarget) {
+      gateT = gateT < gateTarget ? Math.min(1, gateT + dt * 0.55) : Math.max(0, gateT - dt * 0.55);
+      seal.position.y = 1.55 + gateT * 3.4;
+      sealMat.alpha = 1 - gateT * 0.92;
+      sealMat.emissiveColor = BABYLON.Color3.Lerp(
+        BABYLON.Color3.FromHexString(PALETTE.rust).scale(0.4),
+        BABYLON.Color3.FromHexString(PALETTE.goldGlow), gateT);
+      if (gateT >= 1) seal.setEnabled(false);
+    }
+    const open = gateT > 0.15;
+    if (beam.isVisible !== open) { beam.isVisible = open; beamCore.isVisible = open; }
+    if (open) {
+      beamMat.alpha = (0.10 + 0.10 * gateT) * (1 + 0.18 * Math.sin(t / 320));
+      motes.emitRate = 30 * gateT;
+      if (!state.ascend) gateLight.intensity = 1.3 * gateT * (1 + 0.12 * Math.sin(t / 700));
+    } else if (!state.keyTaken) {
+      // sealed: the slab breathes so it reads as alive from across the room
+      sealMat.emissiveColor = BABYLON.Color3.FromHexString(PALETTE.rust)
+        .scale(0.55 + 0.25 * Math.sin(t / 800));
+    }
 
     // doors slide; the glyph-locked door follows the puzzle
     for (const d of doorMeshes) {

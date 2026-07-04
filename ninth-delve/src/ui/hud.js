@@ -23,6 +23,17 @@ export function drawHud(ctx, state, assets, touch) {
   const p = state.player;
   const x0 = 6, w = 64, h = 5;
 
+  // the warden's plate: name + wound bar while the boss hunts you
+  if (state.mode === 'EXPLORE') {
+    const boss = state.entities?.find((e) => e.kind === 'creature' && e.creatureId === 'abykos');
+    if (boss && boss.alive && !boss.hidden && boss.engaged) {
+      const bw = 132, bx = (BUF_W - bw) / 2, by = 36;
+      text(ctx, 'ABYKOS OF THE CORE', BUF_W / 2, by, { size: 8, color: PALETTE.staticWhite, align: 'center' });
+      text(ctx, 'warden of the whisperlock', BUF_W / 2, by + 9, { size: 8, color: PALETTE.mauve, align: 'center' });
+      bar(ctx, bx, by + 13, bw, 5, Math.max(0, boss.hp / boss.maxHp), PALETTE.blood);
+    }
+  }
+
   // slim pool bars, numbers only while a pool is down
   let y = 8;
   for (const stat of ['might', 'speed', 'intellect']) {

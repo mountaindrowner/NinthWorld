@@ -56,6 +56,11 @@ export const sfx = {
   whisper: guard(() => noise(0.9, 900, 'bandpass', 0.28)),
   // THE motif — three descending tones; O2 and the glyph solve share it (Asset §5)
   glyph: guard(() => { [660, 550, 440].forEach((f, i) => setTimeout(() => ctx && tone(f, 0.02, 0.35, 'sine', 0.5), i * 160)); }),
+  // the motif inverted and stretched: the gate opens upward (end transition)
+  ascend: guard(() => {
+    [220, 330, 440, 660, 880].forEach((f, i) => setTimeout(() => ctx && tone(f, 0.05, 1.2, 'sine', 0.3), i * 520));
+    noise(4.2, 1600, 'lowpass', 0.14);
+  }),
 };
 
 /** Low zone drone, detuned per zone (Asset §5). */

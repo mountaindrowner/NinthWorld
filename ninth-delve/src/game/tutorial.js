@@ -64,6 +64,12 @@ const LESSONS = [
     text: () => 'The lock never meant its parts to cross this. Strong hands can climb it — it will cost you, and I will feel it too — or one of my kin could make the air itself a floor.',
   },
   {
+    id: 'gate',
+    when: (s) => !s.keyTaken && tileDist(s.player.x, s.player.y, 18.5, 1.5) < 3.2,
+    title: '◇ the shard — the way out',
+    text: () => 'That seal is the Whisperlock itself — the door this whole place was built to keep. No cypher of mine will move it. It answers only to the Key, and the Key hangs in the warden’s arena, west of here. Take it, and this gate becomes a shaft of light that carries us out.',
+  },
+  {
     id: 'train',
     when: (s) => s.player.xp >= 4,
     title: '◇ the shard — you can grow now',

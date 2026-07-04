@@ -11,12 +11,15 @@
 export const MAP_W = 24;
 export const MAP_H = 24;
 
+// Z5 is chambered (west→east): cache alcove · warden's arena (B guards A) ·
+// exit antechamber, where X is the Whisperlock gate itself. Geometry flex only —
+// every §3.1 placement keeps its cell.
 /** @type {string[]} row-major, MAP[y][x]. Validated 24×24 by world.connectivityTest. */
 export const MAP = [
   '########################',
-  '#..1..........A...X....#',
-  '#.........B............#',
-  '#......................#',
+  '#..1#.........A#..X....#',
+  '#...D.....B....D.......#',
+  '#...#..........#.......#',
   '######L#############.###',
   '####.........#######D###',
   '####.........######~...#',
@@ -96,8 +99,9 @@ export const MURALS = [[4, 15]];
  */
 // Every door seals a real doorway now (flanked by wall on the cross axis):
 // (2,18) Z1→warrens corridor · (4,13) warrens nest→gallery · (12,9)
-// gallery→chasm approach · (20,5) north corridor→chasm shore. The floating
+// gallery→chasm approach · (20,5) chasm shore→exit antechamber · (4,2)
+// arena→cache alcove · (15,2) arena→exit antechamber. The floating
 // mid-gallery door at (6,6) was deleted — the glyph lock L is that room's gate.
-export const DOORS = [[2, 18], [4, 13], [12, 9], [20, 5]];
+export const DOORS = [[4, 2], [15, 2], [2, 18], [4, 13], [12, 9], [20, 5]];
 export const LOCK_DOOR = { x: 6, y: 4, opensWhen: 'glyphs-solved' };
 export const EXIT_GATE = { x: 18, y: 1, opensWhen: 'key-taken' };

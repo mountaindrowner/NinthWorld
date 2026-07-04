@@ -12,4 +12,6 @@ export const WHISPERS = {
   boss: 'It drinks the light I stored against the dark. Do not let it drink you too.',
   key: 'Take it. I am so tired of being the only thing that remembers the door.',
   exit: 'Go, and carry a little of the dark out with you. The rest of us cannot.',
+  gate: 'This is the door I was built around. It knows the Key the warden keeps, and nothing else.',
+  ascend: 'The lock turns. Go up into the morning — and let me see it through your eyes.',
 };

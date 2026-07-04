@@ -12,8 +12,12 @@ const cellCh = (x, y) => (MAP[y] && MAP[y][x]) || '#';
 
 /** What should the player be doing right now? (the "tutorial on what to do") */
 export function objectiveText(state) {
-  if (state.keyTaken) return 'escape — the exit lies in the core’s east wall';
-  if (state.glyph.solved) return 'the lock stands open — face what drinks in the core';
+  if (state.keyTaken) return 'the gate of light stands open — step into the shaft';
+  if (state.glyph.solved) {
+    const warden = state.entities?.find((e) => e.creatureId === 'abykos');
+    if (warden && !warden.alive) return 'the warden is dust — take the Key it guarded';
+    return 'the lock stands open — the warden of the core keeps the Key';
+  }
   const clue = state.glyph.muralSeen || state.player.oddities.includes('O2') || state.glyph.intuited;
   if (clue) return 'return to the gallery — set the three glyphs right';
   if (state.visitedZones.has('Z3')) return 'the pillars want a sequence — the warrens remember it';

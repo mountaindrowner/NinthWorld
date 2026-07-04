@@ -84,9 +84,40 @@ function exploreWorldEvents() {
   }
   if (state.keyTaken && tileDist(p.x, p.y, 18.5, 1.5) < 3.5 && hasLOS(state, p.x, p.y, 18.5, 1.5)) requestWhisper(state, 'exit');
   if (cellAt(zx, zy) === CELL.EXIT) {
-    if (state.keyTaken) { awardXP(state, 2, 'clear'); state.reportReason = 'exit'; state.exited = true; state.mode = 'REPORT'; }
-    else if (!state.exitPrompted) { state.exitPrompted = true; logEvent(state, 'The exit is sealed — you need the Whisperlock Key.'); }
+    if (state.keyTaken) startAscent();
+    else if (!state.exitPrompted) { state.exitPrompted = true; logEvent(state, 'The gate is sealed — it answers only to the Whisperlock Key.'); }
   }
+}
+
+// The end transition: the gate's light shaft lifts you out of the Whisperlock.
+// The game freezes input, scene3d floats the camera up the shaft, the frame
+// washes to white, then the Delve Report.
+const ASCEND_MS = 4600;
+function startAscent() {
+  if (state.ascend) return;
+  awardXP(state, 2, 'clear');
+  state.ascend = { t0: state.t };
+  state.reportReason = 'exit';
+  state.exited = true;
+  state.mode = 'ASCEND';
+  requestWhisper(state, 'ascend');
+  sfx.ascend();
+  document.exitPointerLock?.();
+  input.clearBuffered();
+}
+
+/** White wash: ramps up through ASCEND, washes back out over the report. */
+function drawAscendFade() {
+  const a = state.ascend;
+  if (!a) return;
+  const alpha = state.mode === 'ASCEND'
+    ? Math.min(1, (state.t - a.t0) / (ASCEND_MS * 0.8)) ** 1.4
+    : Math.max(0, 1 - (state.t - (state.endTime || state.t)) / 1600);
+  if (alpha <= 0.005) return;
+  buf.globalAlpha = alpha;
+  buf.fillStyle = PALETTE.staticWhite;
+  buf.fillRect(0, 0, BUF_W, BUF_H);
+  buf.globalAlpha = 1;
 }
 
 function updateExplore(dt) {
@@ -286,6 +317,8 @@ function frame() {
     if (keys.includes('KeyP')) scene3.cyclePixel();
     if (keys.includes('Tab')) { state.mode = 'SHEET'; document.exitPointerLock?.(); input.clearBuffered(); }
     else if (keys.includes('KeyC')) { tut.cyMenu = true; state.cypherMenu = { context: 'explore', ret: 'EXPLORE' }; state.mode = 'CYPHERS'; document.exitPointerLock?.(); input.clearBuffered(); }
+  } else if (modeAtStart === 'ASCEND') {
+    if (state.t - state.ascend.t0 > ASCEND_MS) state.mode = 'REPORT';
   }
 
   // the 3D body mirrors the game, then renders
@@ -319,7 +352,10 @@ function frame() {
     if (drawMapOverlay(buf, state, clicks, keys, input.touchActive)) { state.mode = 'EXPLORE'; input.clearBuffered(); }
   } else if (modeAtStart === 'CYPHERS' && state.mode === 'CYPHERS') {
     drawCypherMenu(buf, state, clicks, keys);
+  } else if (state.mode === 'ASCEND') {
+    drawAscendFade();
   } else if (state.mode === 'REPORT') {
+    drawAscendFade();
     drawReport(buf, state, clicks, keys);
   }
   drawFeedAndFx();

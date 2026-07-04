@@ -825,3 +825,43 @@ zero page errors. SwiftShader too dark/slow to judge the lava visually —
 Mark's phone is the real test.
 Next: Mark judges lava/glow/grain on device; fireMaterial torches, god
 rays, water room queued in docs/09 §recommendations.
+
+## 2026-07-04 — Finale pass: chambered core, the gate made real, ASCEND ending
+Done:
+- **Z5 chambered** (playtest: "doors in the middle of the room", "I don't know
+  what's the boss", "nothing ends the space"). The 22×3 strip is now cache
+  alcove (x1–3) · warden's arena (x5–14, 6 m ceiling — B guards A inside) ·
+  exit antechamber (x16–22). Two new doors, (4,2) and (15,2); all six doors now
+  seal flanked doorways (static audit in the verify script). Placements/zones
+  untouched per prime directive #2.
+- **The exit is a physical gate** at X (18,1): jambs + lintel + a breathing
+  rust glyph-seal slab, and a light well rising to 8.6 m above the cell
+  (skirted so no void bands). Classic build textures the backing wall (18,0)
+  as the great seal. Key taken → seal lifts and dissolves, well fills with a
+  white/cyan beam + rising motes + gate light: visible endpoint from anywhere
+  in the antechamber.
+- **ASCEND end transition** (both builds): stepping on X with the Key freezes
+  input, plays a rising five-tone motif (sfx.ascend), whispers `ascend`, and
+  washes the frame to white over ~4.6 s; the 3D camera drifts to the shaft
+  center, rises to the well top with a slow turn, eyes up. Resolves to the
+  Delve Report ("The lock turns — you rise into the Ninth World."), white
+  washing back out over the report.
+- Boss legibility: top-center plate "ABYKOS OF THE CORE / warden of the
+  whisperlock" + wound bar while it hunts; objectiveText now walks the finale
+  (warden keeps the Key → warden is dust → gate of light stands open); new
+  shard lesson `gate` at the sealed door; door-frame fillers now reach the
+  tallest adjoining ceiling (kills the void band over doorways between rooms
+  of different heights, incl. above the glyph lock).
+
+Deviations/Doc issues:
+- Dungeon §6 says X "opens" on Key; the ending beat (light well + ASCEND mode)
+  is new connective tissue, not in the docs. Flagging rather than doc-editing.
+
+Playtest notes:
+- Headless: ?test=1 all green (connectivity with the new chambers), classic +
+  3D ASCEND→REPORT verified end-to-end, gate tutorial fires, boss plate shows,
+  zero page errors. Screenshots: gate sealed/open, arena, ascend early/late.
+
+Next: Mark plays the finale on device — judge the arena fight (abykos HP 15 /
+dmg 5 vs current build), the seal-lift timing, and whether the white wash
+needs sound ducking.
